@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lux", "Lux\Lux.csproj", "{EA9133F6-3329-4551-8B2B-7CE2B30CBE9B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lux.Editor", "Lux\Lux.Editor.csproj", "{EA9133F6-3329-4551-8B2B-7CE2B30CBE9B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lux.Graphics", "Lux.Graphics\Lux.Graphics.csproj", "{211F2C18-F3D7-4546-8B61-ADA72E2F561A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{EA9133F6-3329-4551-8B2B-7CE2B30CBE9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA9133F6-3329-4551-8B2B-7CE2B30CBE9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA9133F6-3329-4551-8B2B-7CE2B30CBE9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{211F2C18-F3D7-4546-8B61-ADA72E2F561A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{211F2C18-F3D7-4546-8B61-ADA72E2F561A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{211F2C18-F3D7-4546-8B61-ADA72E2F561A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{211F2C18-F3D7-4546-8B61-ADA72E2F561A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
