@@ -5,8 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Lux"
         mc:Ignorable="d"
-        Title="MainWindow" Height="350" Width="525">
-    <Grid>
-        
+        Title="MainWindow" Height="350" Width="525" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow">
+    <Grid Background="#FF1A1A1D">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="149*"/>
+            <ColumnDefinition Width="368*"/>
+        </Grid.ColumnDefinitions>
+
     </Grid>
 </Window>

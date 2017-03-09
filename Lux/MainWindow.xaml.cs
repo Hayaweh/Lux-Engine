@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -27,6 +28,11 @@ namespace Lux
         {
             InitializeComponent();
 
+            Width = 1600;
+            Height = 900;
+            Title = "Lux Engine Editor";
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
             try
             {
                 LuxGraphicEngine = new GraphicsEngine();
@@ -35,7 +41,6 @@ namespace Lux
             catch (Exception error)
             {
                 Console.WriteLine(error);
-                throw;
             }
         }
     }
