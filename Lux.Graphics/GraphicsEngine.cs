@@ -15,6 +15,21 @@ using PhysicalDevice = SharpVk.PhysicalDevice;
 
 namespace Lux.Graphics
 {
+    public struct QueueFamilyIndices
+    {
+        public int GraphicsFamily;
+
+        public QueueFamilyIndices(int graphicsFamily = -1)
+        {
+            GraphicsFamily = graphicsFamily;
+        }
+
+        private bool IsComplete()
+        {
+            return GraphicsFamily >= 0;
+        }
+    }
+
     public class GraphicsEngine
     {
         private bool m_enableValidationLayers = false;
@@ -126,7 +141,8 @@ namespace Lux.Graphics
 
         private void CreateLogicalDevice()
         {
-            //TODO: That's where we are at. QueueFamilyIndices is something I don't find. Halp.
+            //TODO: That's where we are at. QueueFamilyIndices is something I don't find. Halp. Just dumb. It's a struct I must create lololol.
+            //QueueFamilyIndices queueFamilyIndices = Find
         }
 
         private bool IsDeviceSuitable(PhysicalDevice physicalDevice)
