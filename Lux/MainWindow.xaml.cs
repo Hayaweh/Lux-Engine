@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
@@ -33,10 +34,15 @@ namespace Lux
             Title = "Lux Engine Editor";
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
+            this.Activated += InitializeVulkan;
+        }
+
+        private void InitializeVulkan(object sender, EventArgs eventArgs)
+        {
             try
             {
                 LuxGraphicEngine = new GraphicsEngine();
-                LuxGraphicEngine.Run();
+                LuxGraphicEngine.Run(new WindowInteropHelper(this).Handle);
             }
             catch (Exception error)
             {
