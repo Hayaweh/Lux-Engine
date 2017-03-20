@@ -27,18 +27,19 @@ namespace Lux
 
         public MainWindow()
         {
+            Activated += InitializeVulkan;
             InitializeComponent();
 
-            Width = 1600;
-            Height = 900;
+            Width = 1280;
+            Height = 720;
             Title = "Lux Engine Editor";
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-
-            this.Activated += InitializeVulkan;
         }
 
         private void InitializeVulkan(object sender, EventArgs eventArgs)
         {
+            Activated -= InitializeVulkan;
+
             try
             {
                 LuxGraphicEngine = new GraphicsEngine();
