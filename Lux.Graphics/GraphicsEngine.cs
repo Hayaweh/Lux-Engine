@@ -105,6 +105,7 @@ namespace Lux.Graphics
             CreateSwapChain();
             CreateImageViews();
             CreateGraphicsPipeline();
+            CreateRenderPass();
         }
 
         private async void MainLoop()
@@ -357,6 +358,101 @@ namespace Lux.Graphics
             };
 
             PipelineShaderStageCreateInfo[] shaderStages = { vertexShaderStageCreateInfo, fragmentShaderStageCreateInfo };
+
+            SharpVk.PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo = new SharpVk.PipelineVertexInputStateCreateInfo()
+            {
+                VertexAttributeDescriptions = null,
+                VertexBindingDescriptions = null
+            };
+
+            SharpVk.PipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo = new SharpVk.PipelineInputAssemblyStateCreateInfo()
+            {
+                PrimitiveRestartEnable = false,
+                Topology = PrimitiveTopology.TriangleList
+            };
+
+            Viewport viewport = new Viewport()
+            {
+                X = 0.0f,
+                Y = 0.0f,
+                Width = m_swapChainExtent2D.Width,
+                Height = m_swapChainExtent2D.Height,
+                MaxDepth = 1.0f,
+                MinDepth = 0.0f
+            };
+
+            Rect2D scissoRect2D = new Rect2D(new Offset2D(0, 0), m_swapChainExtent2D);
+
+            SharpVk.PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo = new SharpVk.PipelineViewportStateCreateInfo()
+            {
+                Viewports = new[] { viewport },
+                Scissors = new[] { scissoRect2D }
+            };
+
+            SharpVk.PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo = new SharpVk.PipelineRasterizationStateCreateInfo()
+            {
+                DepthClampEnable = false,
+                RasterizerDiscardEnable = false,
+                PolygonMode = PolygonMode.Fill,
+                LineWidth = 1.0f,
+                CullMode = CullModeFlags.Back,
+                FrontFace = FrontFace.Clockwise,
+                DepthBiasEnable = false,
+                DepthBiasConstantFactor = 0.0f,
+                DepthBiasClamp = 0.0f,
+                DepthBiasSlopeFactor = 0.0f
+            };
+
+            SharpVk.PipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo = new SharpVk.PipelineMultisampleStateCreateInfo()
+            {
+                SampleShadingEnable = false,
+                RasterizationSamples = SampleCountFlags.SampleCount1,
+                MinSampleShading = 1.0f,
+                SampleMask = null,
+                AlphaToCoverageEnable = false,
+                AlphaToOneEnable = false
+            };
+
+            SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
+
+            PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState = new PipelineColorBlendAttachmentState()
+            {
+                ColorWriteMask = ColorComponentFlags.R | ColorComponentFlags.G | ColorComponentFlags.B | ColorComponentFlags.A,
+                BlendEnable = false,
+                SourceColorBlendFactor = BlendFactor.One,
+                DestinationColorBlendFactor = BlendFactor.Zero,
+                ColorBlendOp = BlendOp.Add,
+                SourceAlphaBlendFactor = BlendFactor.One,
+                DestinationAlphaBlendFactor = BlendFactor.Zero,
+                AlphaBlendOp = BlendOp.Add
+            };
+
+            SharpVk.PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo = new SharpVk.PipelineColorBlendStateCreateInfo()
+            {
+                LogicOpEnable = false,
+                LogicOp = LogicOp.Copy,
+                Attachments = new[] { pipelineColorBlendAttachmentState },
+                BlendConstants = new[] { 0.0f, 0.0f, 0.0f, 0.0f }
+            };
+
+            SharpVk.PipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo = new SharpVk.PipelineDynamicStateCreateInfo()
+            {
+                DynamicStates = new[] { DynamicState.LineWidth, DynamicState.Viewport }
+            };
+
+            SharpVk.PipelineLayout pipelineLayout = m_logicalDevice.CreatePipelineLayout(new SharpVk.PipelineLayoutCreateInfo());
+            Console.WriteLine(pipelineLayout.Equals(null) ? "Vulkan: Failed to create pipeline layout." : "Vulkan: Successfully created pipeline layout.");
+        }
+
+        private void CreateRenderPass()
+        {
+            AttachmentDescription colorAttachmentDescription = new AttachmentDescription()
+            {
+                Format = m_swapChainImageFormat,
+                Samples = SampleCountFlags.SampleCount1,
+                LoadOp = AttachmentLoadOp.Clear,
+                StoreOp = AttachmentStoreOp.Store
+            };
         }
 
         private static uint[] LoadShaderData(string filePath, out int codeSize)
