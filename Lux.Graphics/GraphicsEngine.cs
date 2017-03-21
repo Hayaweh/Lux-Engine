@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using SharpVk;
 using SharpVk.Interop;
 using ApplicationInfo = SharpVk.ApplicationInfo;
+using Buffer = System.Buffer;
 using DebugReportCallbackCreateInfo = SharpVk.DebugReportCallbackCreateInfo;
 using Device = SharpVk.Device;
 using DeviceCreateInfo = SharpVk.DeviceCreateInfo;
@@ -17,7 +18,9 @@ using ImageViewCreateInfo = SharpVk.ImageViewCreateInfo;
 using Instance = SharpVk.Instance;
 using InstanceCreateInfo = SharpVk.InstanceCreateInfo;
 using PhysicalDevice = SharpVk.PhysicalDevice;
+using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
 using Queue = SharpVk.Queue;
+using ShaderModule = SharpVk.ShaderModule;
 using Surface = SharpVk.Surface;
 using Swapchain = SharpVk.Swapchain;
 using SwapchainCreateInfo = SharpVk.SwapchainCreateInfo;
@@ -75,6 +78,8 @@ namespace Lux.Graphics
         private Extent2D m_swapChainExtent2D;
         private List<ImageView> m_swapChainImageViews;
 
+        private ShaderModule m_vertexShader, m_fragmentShader;
+
         private bool m_isRunning;
 
         public void Run(IntPtr windowHandle)
@@ -99,6 +104,7 @@ namespace Lux.Graphics
             CreateLogicalDevice();
             CreateSwapChain();
             CreateImageViews();
+            CreateGraphicsPipeline();
         }
 
         private async void MainLoop()
@@ -320,6 +326,58 @@ namespace Lux.Graphics
 
         private void CreateGraphicsPipeline()
         {
+            int vertexSize, fragmentSize = 0;
+            uint[] vertexShaderData = LoadShaderData(@"./Shaders/vertex.vert.spv", out vertexSize);
+            uint[] fragmentShaderData = LoadShaderData(@"./Shaders/fragment.frag.spv", out fragmentSize);
+
+            m_vertexShader = m_logicalDevice.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo()
+            {
+                Code = vertexShaderData,
+                CodeSize = vertexSize
+            });
+
+            m_fragmentShader = m_logicalDevice.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo()
+            {
+                Code = fragmentShaderData,
+                CodeSize = fragmentSize
+            });
+
+            PipelineShaderStageCreateInfo vertexShaderStageCreateInfo = new PipelineShaderStageCreateInfo()
+            {
+                Module = m_vertexShader,
+                Name = "main",
+                Stage = ShaderStageFlags.Vertex
+            };
+
+            PipelineShaderStageCreateInfo fragmentShaderStageCreateInfo = new PipelineShaderStageCreateInfo()
+            {
+                Module = m_fragmentShader,
+                Name = "main",
+                Stage = ShaderStageFlags.Fragment
+            };
+
+            PipelineShaderStageCreateInfo[] shaderStages = { vertexShaderStageCreateInfo, fragmentShaderStageCreateInfo };
+        }
+
+        private static uint[] LoadShaderData(string filePath, out int codeSize)
+        {
+            if (File.Exists(filePath))
+            {
+                var fileBytes = File.ReadAllBytes(filePath);
+                var shaderData = new uint[(int)Math.Ceiling(fileBytes.Length / 4f)];
+
+                Buffer.BlockCopy(fileBytes, 0, shaderData, 0, fileBytes.Length);
+
+                codeSize = fileBytes.Length;
+
+                return shaderData;
+            }
+            else
+            {
+                Console.WriteLine("Vulkan: Could not find Shader file at: {0}", filePath);
+                codeSize = 0;
+                return new uint[0];
+            }
         }
 
         private QueueFamilyIndices FindQueueFamilies(PhysicalDevice device)
