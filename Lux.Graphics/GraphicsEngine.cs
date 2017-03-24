@@ -12,6 +12,8 @@ using Device = SharpVk.Device;
 using DeviceCreateInfo = SharpVk.DeviceCreateInfo;
 using DeviceQueueCreateInfo = SharpVk.DeviceQueueCreateInfo;
 using ExtensionProperties = SharpVk.ExtensionProperties;
+using Framebuffer = SharpVk.Framebuffer;
+using GraphicsPipelineCreateInfo = SharpVk.GraphicsPipelineCreateInfo;
 using Image = SharpVk.Image;
 using ImageView = SharpVk.ImageView;
 using ImageViewCreateInfo = SharpVk.ImageViewCreateInfo;
@@ -20,6 +22,7 @@ using InstanceCreateInfo = SharpVk.InstanceCreateInfo;
 using PhysicalDevice = SharpVk.PhysicalDevice;
 using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
 using Queue = SharpVk.Queue;
+using RenderPass = SharpVk.RenderPass;
 using ShaderModule = SharpVk.ShaderModule;
 using Surface = SharpVk.Surface;
 using Swapchain = SharpVk.Swapchain;
@@ -79,6 +82,11 @@ namespace Lux.Graphics
         private List<ImageView> m_swapChainImageViews;
 
         private ShaderModule m_vertexShader, m_fragmentShader;
+        private SharpVk.PipelineLayout m_pipelineLayout;
+        private RenderPass m_renderPass = null;
+        private SharpVk.Pipeline[] m_graphicsPipeline;
+
+        private List<SharpVk.Framebuffer> m_swapChainFramebuffers = new List<Framebuffer>();
 
         private bool m_isRunning;
 
@@ -105,7 +113,8 @@ namespace Lux.Graphics
             CreateSwapChain();
             CreateImageViews();
             CreateGraphicsPipeline();
-            CreateRenderPass();
+            CreateFramebuffers();
+            CreateCommandPool();
         }
 
         private async void MainLoop()
@@ -440,8 +449,31 @@ namespace Lux.Graphics
                 DynamicStates = new[] { DynamicState.LineWidth, DynamicState.Viewport }
             };
 
-            SharpVk.PipelineLayout pipelineLayout = m_logicalDevice.CreatePipelineLayout(new SharpVk.PipelineLayoutCreateInfo());
-            Console.WriteLine(pipelineLayout.Equals(null) ? "Vulkan: Failed to create pipeline layout." : "Vulkan: Successfully created pipeline layout.");
+            m_pipelineLayout = m_logicalDevice.CreatePipelineLayout(new SharpVk.PipelineLayoutCreateInfo());
+            Console.WriteLine(m_pipelineLayout.Equals(null) ? "Vulkan: Failed to create pipeline layout." : "Vulkan: Successfully created pipeline layout.");
+
+            CreateRenderPass();
+
+            SharpVk.GraphicsPipelineCreateInfo graphicsPipelineCreateInfo = new SharpVk.GraphicsPipelineCreateInfo()
+            {
+                Stages = shaderStages,
+                VertexInputState = pipelineVertexInputStateCreateInfo,
+                InputAssemblyState = pipelineInputAssemblyStateCreateInfo,
+                ViewportState = pipelineViewportStateCreateInfo,
+                RasterizationState = pipelineRasterizationStateCreateInfo,
+                MultisampleState = pipelineMultisampleStateCreateInfo,
+                DepthStencilState = pipelineDepthStencilStateCreateInfo,
+                ColorBlendState = pipelineColorBlendStateCreateInfo,
+                DynamicState = pipelineDynamicStateCreateInfo,
+                Layout = m_pipelineLayout,
+                Subpass = 0,
+                RenderPass = m_renderPass,
+                BasePipelineIndex = -1,
+                BasePipelineHandle = null
+            };
+
+            m_graphicsPipeline = m_logicalDevice.CreateGraphicsPipelines(null, new[] { graphicsPipelineCreateInfo });
+            Console.WriteLine(m_graphicsPipeline.Equals(null) ? "Vulkan: Failed to create graphics pipeline." : "Vulkan: Successfully created graphics pipeline.");
         }
 
         private void CreateRenderPass()
@@ -451,7 +483,70 @@ namespace Lux.Graphics
                 Format = m_swapChainImageFormat,
                 Samples = SampleCountFlags.SampleCount1,
                 LoadOp = AttachmentLoadOp.Clear,
-                StoreOp = AttachmentStoreOp.Store
+                StoreOp = AttachmentStoreOp.Store,
+                StencilLoadOp = AttachmentLoadOp.DontCare,
+                StencilStoreOp = AttachmentStoreOp.DontCare,
+                InitialLayout = ImageLayout.Undefined,
+                FinalLayout = ImageLayout.PresentSource
+            };
+
+            AttachmentReference attachmentReference = new AttachmentReference()
+            {
+                Attachment = 0,
+                Layout = ImageLayout.ColorAttachmentOptimal
+            };
+
+            SharpVk.SubpassDescription subpassDescription = new SharpVk.SubpassDescription()
+            {
+                PipelineBindPoint = PipelineBindPoint.Graphics,
+                ColorAttachments = new[] { attachmentReference },
+            };
+
+            m_renderPass = m_logicalDevice.CreateRenderPass(new SharpVk.RenderPassCreateInfo()
+            {
+                Attachments = new[] { colorAttachmentDescription },
+                Subpasses = new[] { subpassDescription }
+            });
+
+            Console.WriteLine(m_renderPass.Equals(null) ? "Vulkan: Failed to create render pass." : "Vulkan: Successfully created render pass.");
+        }
+
+        private void CreateFramebuffers()
+        {
+            m_swapChainFramebuffers.Clear();
+
+            foreach (ImageView swapChainImageView in m_swapChainImageViews)
+            {
+                SharpVk.FramebufferCreateInfo framebufferCreateInfo = new SharpVk.FramebufferCreateInfo()
+                {
+                    RenderPass = m_renderPass,
+                    Attachments = new[] { swapChainImageView },
+                    Width = m_swapChainExtent2D.Width,
+                    Height = m_swapChainExtent2D.Height,
+                    Layers = 1
+                };
+
+                Framebuffer framebuffer = m_logicalDevice.CreateFramebuffer(framebufferCreateInfo);
+
+                if (!framebuffer.Equals(null))
+                {
+                    m_swapChainFramebuffers.Add(framebuffer);
+                    Console.WriteLine("Vulkan: Successfully created Framebuffer");
+                }
+                else
+                {
+                    Console.WriteLine("Vulkan: Failed to create Framebuffer");
+                }
+            }
+        }
+
+        private void CreateCommandPool()
+        {
+            QueueFamilyIndices indices = FindQueueFamilies(m_vkPhysicalDevice);
+
+            SharpVk.CommandPoolCreateInfo commandPoolCreateInfo = new SharpVk.CommandPoolCreateInfo()
+            {
+                QueueFamilyIndex = (uint)indices.GraphicsFamily
             };
         }
 
