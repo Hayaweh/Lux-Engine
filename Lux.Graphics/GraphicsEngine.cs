@@ -338,6 +338,9 @@ namespace Lux.Graphics
 
             //TODO: Check that surface is supported using vkGetPhysicalDeviceSupportKHR (Smtg like that with physicalDevice.Getblablabla
 
+            if(!m_vkPhysicalDevice.GetSurfaceSupport((uint)indices.PresentationFamily, m_surface))
+                throw new Exception("Vulkan: Surface is not supported by physical device!");
+
             m_swapchain = m_logicalDevice.CreateSwapchain(swapchainCreateInfo);
 
             m_swapChainImages.AddRange(m_swapchain.GetImages());
@@ -425,12 +428,12 @@ namespace Lux.Graphics
                 MinDepth = 0.0f
             };
 
-            Rect2D scissoRect2D = new Rect2D(new Offset2D(0, 0), m_swapChainExtent2D);
+            Rect2D scissorRect2D = new Rect2D(new Offset2D(0, 0), m_swapChainExtent2D);
 
             SharpVk.PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo = new SharpVk.PipelineViewportStateCreateInfo()
             {
                 Viewports = new[] { m_viewport },
-                Scissors = new[] { scissoRect2D }
+                Scissors = new[] { scissorRect2D }
             };
 
             SharpVk.PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo = new SharpVk.PipelineRasterizationStateCreateInfo()
@@ -457,7 +460,7 @@ namespace Lux.Graphics
                 AlphaToOneEnable = false
             };
 
-            SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
+            //SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
 
             PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState = new PipelineColorBlendAttachmentState()
             {
@@ -497,7 +500,7 @@ namespace Lux.Graphics
                 ViewportState = pipelineViewportStateCreateInfo,
                 RasterizationState = pipelineRasterizationStateCreateInfo,
                 MultisampleState = pipelineMultisampleStateCreateInfo,
-                DepthStencilState = pipelineDepthStencilStateCreateInfo,
+                DepthStencilState = null,
                 ColorBlendState = pipelineColorBlendStateCreateInfo,
                 DynamicState = pipelineDynamicStateCreateInfo,
                 Layout = m_pipelineLayout,
