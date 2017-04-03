@@ -92,18 +92,24 @@ namespace Lux.Graphics
         private SharpVk.CommandPool m_commandPool;
         private List<SharpVk.CommandBuffer> m_commandBuffers;
 
+        private SharpVk.Semaphore m_imgAvailableSemaphore;
+        private SharpVk.Semaphore m_renderFinishedSemaphore;
+
         private bool m_isRunning;
+        private Viewport m_viewport;
+
+        public bool IsRunning => m_isRunning;
 
         public void Run(IntPtr windowHandle)
         {
             m_windowHandle = windowHandle;
             InitVulkan();
             m_isRunning = true;
-            MainLoop();
         }
 
         public void Stop()
         {
+            m_logicalDevice.WaitIdle();
             m_isRunning = false;
         }
 
@@ -120,14 +126,33 @@ namespace Lux.Graphics
             CreateFramebuffers();
             CreateCommandPool();
             CreateCommandBuffers();
+            StartCommandBufferRecording();
+            CreateSemaphores();
         }
 
-        private async void MainLoop()
+        public void DrawFrame()
         {
-            while (m_isRunning)
+            uint nextFrameIndex = m_swapchain.AcquireNextImage(ulong.MaxValue, m_imgAvailableSemaphore, null);
+
+            SharpVk.SubmitInfo submitInfo = new SharpVk.SubmitInfo()
             {
-                await Task.Delay(1);
-            }
+                WaitSemaphores = new[] { m_imgAvailableSemaphore },
+                WaitDestinationStageMask = new[] { PipelineStageFlags.ColorAttachmentOutput, },
+                CommandBuffers = new[] { m_commandBuffers[(int)nextFrameIndex] },
+                SignalSemaphores = new[] { m_renderFinishedSemaphore }
+            };
+
+            m_graphicsQueue.Submit(submitInfo, null);
+
+            SharpVk.PresentInfo presentInfo = new SharpVk.PresentInfo()
+            {
+                WaitSemaphores = new[] { m_renderFinishedSemaphore },
+                Swapchains = new[] { m_swapchain },
+                ImageIndices = new[] { nextFrameIndex },
+                Results = null
+            };
+
+            m_presentationQueue.Present(presentInfo);
         }
 
         private void CreateInstance()
@@ -385,7 +410,7 @@ namespace Lux.Graphics
                 Topology = PrimitiveTopology.TriangleList
             };
 
-            Viewport viewport = new Viewport()
+            m_viewport = new Viewport()
             {
                 X = 0.0f,
                 Y = 0.0f,
@@ -399,7 +424,7 @@ namespace Lux.Graphics
 
             SharpVk.PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo = new SharpVk.PipelineViewportStateCreateInfo()
             {
-                Viewports = new[] { viewport },
+                Viewports = new[] { m_viewport },
                 Scissors = new[] { scissoRect2D }
             };
 
@@ -483,6 +508,16 @@ namespace Lux.Graphics
 
         private void CreateRenderPass()
         {
+            SubpassDependency subpassDependency = new SubpassDependency()
+            {
+                SourceSubpass = Constants.SubpassExternal,
+                SourceStageMask = PipelineStageFlags.ColorAttachmentOutput,
+                SourceAccessMask = 0,
+                DestinationSubpass = 0,
+                DestinationStageMask = PipelineStageFlags.ColorAttachmentOutput,
+                DestinationAccessMask = AccessFlags.ColorAttachmentRead | AccessFlags.ColorAttachmentWrite
+            };
+
             AttachmentDescription colorAttachmentDescription = new AttachmentDescription()
             {
                 Format = m_swapChainImageFormat,
@@ -510,7 +545,8 @@ namespace Lux.Graphics
             m_renderPass = m_logicalDevice.CreateRenderPass(new SharpVk.RenderPassCreateInfo()
             {
                 Attachments = new[] { colorAttachmentDescription },
-                Subpasses = new[] { subpassDescription }
+                Subpasses = new[] { subpassDescription },
+                Dependencies = new[] { subpassDependency }
             });
 
             Console.WriteLine(m_renderPass.Equals(null) ? "Vulkan: Failed to create render pass." : "Vulkan: Successfully created render pass.");
@@ -582,6 +618,57 @@ namespace Lux.Graphics
                 throw new Exception("Vulkan: No Command Buffers initialized");
             }
             Console.WriteLine("Vulkan: Command Buffers successfully created");
+        }
+
+        private void StartCommandBufferRecording()
+        {
+            foreach (CommandBuffer commandBuffer in m_commandBuffers)
+            {
+                SharpVk.CommandBufferBeginInfo commandBufferBeginInfo = new SharpVk.CommandBufferBeginInfo()
+                {
+                    Flags = CommandBufferUsageFlags.SimultaneousUse,
+                    InheritanceInfo = null
+                };
+
+                commandBuffer.Begin(commandBufferBeginInfo);
+
+                SharpVk.RenderPassBeginInfo renderPassBeginInfo = new SharpVk.RenderPassBeginInfo()
+                {
+                    RenderPass = m_renderPass,
+                    Framebuffer = m_swapChainFramebuffers[m_commandBuffers.IndexOf(commandBuffer)],
+                    RenderArea = new Rect2D(new Offset2D(), m_swapChainExtent2D),
+                    ClearValues = new[] { (ClearValue)new ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f), }
+                };
+
+                commandBuffer.SetViewport(0, m_viewport);
+
+                commandBuffer.BeginRenderPass(renderPassBeginInfo, SubpassContents.Inline);
+
+                commandBuffer.BindPipeline(PipelineBindPoint.Graphics, m_graphicsPipeline.First(pipeline => true));
+                commandBuffer.Draw(3, 1, 0, 0);
+
+                commandBuffer.EndRenderPass();
+
+                commandBuffer.End();
+            }
+        }
+
+        private void CreateSemaphores()
+        {
+            SharpVk.SemaphoreCreateInfo semaphoreCreateInfo = new SharpVk.SemaphoreCreateInfo()
+            {
+                Flags = SemaphoreCreateFlags.None
+            };
+
+            m_imgAvailableSemaphore = m_logicalDevice.CreateSemaphore(semaphoreCreateInfo);
+            m_renderFinishedSemaphore = m_logicalDevice.CreateSemaphore(semaphoreCreateInfo);
+
+            if (m_imgAvailableSemaphore.Equals(null) || m_imgAvailableSemaphore.Equals(null))
+            {
+                throw new Exception("Vulkan: Semaphores creation failed");
+            }
+
+            Console.WriteLine("Vulkan: Successfully created Semaphores");
         }
 
         private static uint[] LoadShaderData(string filePath, out int codeSize)

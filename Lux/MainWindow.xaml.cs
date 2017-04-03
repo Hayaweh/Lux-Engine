@@ -24,6 +24,7 @@ namespace Lux
     public partial class MainWindow : Window
     {
         private GraphicsEngine LuxGraphicEngine = null;
+        private GraphicsEngine m_luxGraphicEngine;
 
         public MainWindow()
         {
@@ -42,13 +43,34 @@ namespace Lux
 
             try
             {
-                LuxGraphicEngine = new GraphicsEngine();
-                LuxGraphicEngine.Run(new WindowInteropHelper(this).Handle);
+                m_luxGraphicEngine = LuxGraphicEngine;
+                m_luxGraphicEngine = new GraphicsEngine();
+                m_luxGraphicEngine.Run(new WindowInteropHelper(this).Handle);
+                MainLoop();
             }
             catch (Exception error)
             {
                 Console.WriteLine(error);
             }
+        }
+
+        private async void MainLoop()
+        {
+            while (IsVisible && m_luxGraphicEngine.IsRunning)
+            {
+                m_luxGraphicEngine.DrawFrame();
+                await Task.Delay(16);
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            m_luxGraphicEngine.Stop();
+        }
+
+        public bool IsAmbientPropertyAvailable(string propertyName)
+        {
+            return true;
         }
     }
 }
