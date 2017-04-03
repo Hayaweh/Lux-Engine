@@ -7,6 +7,7 @@ using SharpVk;
 using SharpVk.Interop;
 using ApplicationInfo = SharpVk.ApplicationInfo;
 using Buffer = System.Buffer;
+using CommandBuffer = SharpVk.CommandBuffer;
 using DebugReportCallbackCreateInfo = SharpVk.DebugReportCallbackCreateInfo;
 using Device = SharpVk.Device;
 using DeviceCreateInfo = SharpVk.DeviceCreateInfo;
@@ -88,6 +89,9 @@ namespace Lux.Graphics
 
         private List<SharpVk.Framebuffer> m_swapChainFramebuffers = new List<Framebuffer>();
 
+        private SharpVk.CommandPool m_commandPool;
+        private List<SharpVk.CommandBuffer> m_commandBuffers;
+
         private bool m_isRunning;
 
         public void Run(IntPtr windowHandle)
@@ -115,6 +119,7 @@ namespace Lux.Graphics
             CreateGraphicsPipeline();
             CreateFramebuffers();
             CreateCommandPool();
+            CreateCommandBuffers();
         }
 
         private async void MainLoop()
@@ -548,6 +553,35 @@ namespace Lux.Graphics
             {
                 QueueFamilyIndex = (uint)indices.GraphicsFamily
             };
+
+            m_commandPool = m_logicalDevice.CreateCommandPool(commandPoolCreateInfo);
+
+            if (m_commandPool.Equals(null))
+            {
+                throw new Exception("Vulkan: Initialization of Command Pool failed.");
+            }
+            Console.WriteLine("Vulkan: Successfully created Command Pool");
+        }
+
+        private void CreateCommandBuffers()
+        {
+            m_commandBuffers = new List<CommandBuffer>();
+
+            SharpVk.CommandBufferAllocateInfo commandBufferAllocateInfo = new SharpVk.CommandBufferAllocateInfo()
+            {
+                CommandPool = m_commandPool,
+                Level = CommandBufferLevel.Primary,
+                CommandBufferCount = (uint)m_swapChainFramebuffers.Count
+            };
+
+            m_commandBuffers.Clear();
+            m_commandBuffers.AddRange(m_logicalDevice.AllocateCommandBuffers(commandBufferAllocateInfo));
+
+            if (m_commandBuffers.Count < 1)
+            {
+                throw new Exception("Vulkan: No Command Buffers initialized");
+            }
+            Console.WriteLine("Vulkan: Command Buffers successfully created");
         }
 
         private static uint[] LoadShaderData(string filePath, out int codeSize)
