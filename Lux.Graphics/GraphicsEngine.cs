@@ -121,6 +121,7 @@ namespace Lux.Graphics
             SelectPhysicalDevice();
             CreateLogicalDevice();
             CreateSwapChain();
+            //TODO: Debug from CreateImageViews :)
             CreateImageViews();
             CreateGraphicsPipeline();
             CreateFramebuffers();
@@ -257,6 +258,8 @@ namespace Lux.Graphics
                 indices.PresentationFamily
             };
 
+            uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToList();
+
             foreach (int queueFamily in uniqueQueueFamilies)
             {
                 queuesCreateInfos.Add(new DeviceQueueCreateInfo
@@ -272,7 +275,7 @@ namespace Lux.Graphics
             {
                 QueueCreateInfos = queuesCreateInfos.ToArray(),
                 EnabledFeatures = deviceFeatures,
-                EnabledExtensionNames = m_deviceExtensions.ToArray(),
+                EnabledExtensionNames = new[] { KhrSwapchain.ExtensionName },
                 EnabledLayerNames = m_validationLayers.ToArray()
             };
 
@@ -332,6 +335,8 @@ namespace Lux.Graphics
                 swapchainCreateInfo.ImageSharingMode = SharingMode.Exclusive;
                 swapchainCreateInfo.QueueFamilyIndices = null;
             }
+
+            //TODO: Check that surface is supported using vkGetPhysicalDeviceSupportKHR (Smtg like that with physicalDevice.Getblablabla
 
             m_swapchain = m_logicalDevice.CreateSwapchain(swapchainCreateInfo);
 
