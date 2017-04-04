@@ -35,7 +35,7 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="SharpVk, Version=0.3.3.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\SharpVk.0.3.3-dev2\lib\portable45-net45+win8+wpa81\SharpVk.dll</HintPath>
+      <HintPath>..\packages\SharpVk.0.3.3-dev\lib\portable45-net45+win8+wpa81\SharpVk.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />

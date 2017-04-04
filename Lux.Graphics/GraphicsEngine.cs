@@ -25,6 +25,7 @@ using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
 using Queue = SharpVk.Queue;
 using RenderPass = SharpVk.RenderPass;
 using ShaderModule = SharpVk.ShaderModule;
+using SubmitInfo = SharpVk.SubmitInfo;
 using Surface = SharpVk.Surface;
 using Swapchain = SharpVk.Swapchain;
 using SwapchainCreateInfo = SharpVk.SwapchainCreateInfo;
@@ -80,7 +81,7 @@ namespace Lux.Graphics
         private List<Image> m_swapChainImages = new List<Image>();
         private Format m_swapChainImageFormat;
         private Extent2D m_swapChainExtent2D;
-        private List<ImageView> m_swapChainImageViews;
+        private List<ImageView> m_swapChainImageViews = new List<ImageView>();
 
         private ShaderModule m_vertexShader, m_fragmentShader;
         private SharpVk.PipelineLayout m_pipelineLayout;
@@ -113,6 +114,8 @@ namespace Lux.Graphics
             m_isRunning = false;
         }
 
+        #region MyVulkanImpl
+
         private void InitVulkan()
         {
             CreateInstance();
@@ -121,7 +124,6 @@ namespace Lux.Graphics
             SelectPhysicalDevice();
             CreateLogicalDevice();
             CreateSwapChain();
-            //TODO: Debug from CreateImageViews :)
             CreateImageViews();
             CreateGraphicsPipeline();
             CreateFramebuffers();
@@ -133,6 +135,8 @@ namespace Lux.Graphics
 
         public void DrawFrame()
         {
+            m_logicalDevice.WaitIdle();
+
             uint nextFrameIndex = m_swapchain.AcquireNextImage(ulong.MaxValue, m_imgAvailableSemaphore, null);
 
             SharpVk.SubmitInfo submitInfo = new SharpVk.SubmitInfo()
@@ -338,7 +342,7 @@ namespace Lux.Graphics
 
             //TODO: Check that surface is supported using vkGetPhysicalDeviceSupportKHR (Smtg like that with physicalDevice.Getblablabla
 
-            if(!m_vkPhysicalDevice.GetSurfaceSupport((uint)indices.PresentationFamily, m_surface))
+            if (!m_vkPhysicalDevice.GetSurfaceSupport((uint)indices.PresentationFamily, m_surface))
                 throw new Exception("Vulkan: Surface is not supported by physical device!");
 
             m_swapchain = m_logicalDevice.CreateSwapchain(swapchainCreateInfo);
@@ -348,15 +352,15 @@ namespace Lux.Graphics
 
         private void CreateImageViews()
         {
-            m_swapChainImageViews = new List<ImageView>(m_swapChainImages.Count);
+            m_swapChainImageViews.Clear();
 
             foreach (Image image in m_swapChainImages)
             {
                 ImageViewCreateInfo imageViewCreateInfo = new ImageViewCreateInfo()
                 {
                     Image = image,
-                    ViewType = ImageViewType.ImageView2d,
                     Format = m_swapChainImageFormat,
+                    ViewType = ImageViewType.ImageView2d,
                     Components = ComponentMapping.Identity,
                     SubresourceRange = new ImageSubresourceRange()
                     {
@@ -460,7 +464,7 @@ namespace Lux.Graphics
                 AlphaToOneEnable = false
             };
 
-            //SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
+            SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
 
             PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState = new PipelineColorBlendAttachmentState()
             {
@@ -500,7 +504,7 @@ namespace Lux.Graphics
                 ViewportState = pipelineViewportStateCreateInfo,
                 RasterizationState = pipelineRasterizationStateCreateInfo,
                 MultisampleState = pipelineMultisampleStateCreateInfo,
-                DepthStencilState = null,
+                DepthStencilState = pipelineDepthStencilStateCreateInfo,
                 ColorBlendState = pipelineColorBlendStateCreateInfo,
                 DynamicState = pipelineDynamicStateCreateInfo,
                 Layout = m_pipelineLayout,
@@ -548,6 +552,7 @@ namespace Lux.Graphics
             {
                 PipelineBindPoint = PipelineBindPoint.Graphics,
                 ColorAttachments = new[] { attachmentReference },
+                DepthStencilAttachment = new AttachmentReference(0, ImageLayout.DepthStencilAttachmentOptimal) // Fixes the Code 6 for DepthStencilAttachement. I'm not fan of that tho
             };
 
             m_renderPass = m_logicalDevice.CreateRenderPass(new SharpVk.RenderPassCreateInfo()
@@ -635,7 +640,6 @@ namespace Lux.Graphics
                 SharpVk.CommandBufferBeginInfo commandBufferBeginInfo = new SharpVk.CommandBufferBeginInfo()
                 {
                     Flags = CommandBufferUsageFlags.SimultaneousUse,
-                    InheritanceInfo = null
                 };
 
                 commandBuffer.Begin(commandBufferBeginInfo);
@@ -652,7 +656,7 @@ namespace Lux.Graphics
 
                 commandBuffer.BeginRenderPass(renderPassBeginInfo, SubpassContents.Inline);
 
-                commandBuffer.BindPipeline(PipelineBindPoint.Graphics, m_graphicsPipeline.First(pipeline => true));
+                commandBuffer.BindPipeline(PipelineBindPoint.Graphics, m_graphicsPipeline[0]);
                 commandBuffer.Draw(3, 1, 0, 0);
 
                 commandBuffer.EndRenderPass();
@@ -683,6 +687,8 @@ namespace Lux.Graphics
         {
             if (File.Exists(filePath))
             {
+                Console.WriteLine("Vulkan: Shader {0} found", filePath);
+
                 var fileBytes = File.ReadAllBytes(filePath);
                 var shaderData = new uint[(int)Math.Ceiling(fileBytes.Length / 4f)];
 
@@ -877,5 +883,7 @@ namespace Lux.Graphics
             Console.WriteLine("Vulkan Code: " + messageCode + " - " + message);
             return false;
         }
+
+        #endregion MyVulkanImpl
     }
 }

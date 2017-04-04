@@ -41,25 +41,21 @@ namespace Lux
         {
             Activated -= InitializeVulkan;
 
-            try
-            {
-                m_luxGraphicEngine = LuxGraphicEngine;
-                m_luxGraphicEngine = new GraphicsEngine();
-                m_luxGraphicEngine.Run(new WindowInteropHelper(this).Handle);
-                MainLoop();
-            }
-            catch (Exception error)
-            {
-                Console.WriteLine(error);
-            }
+            m_luxGraphicEngine = LuxGraphicEngine;
+            m_luxGraphicEngine = new GraphicsEngine();
+            m_luxGraphicEngine.Run(new WindowInteropHelper(this).Handle);
+
+            MainLoop();
         }
 
         private async void MainLoop()
         {
+            await Task.Delay(2000);
+
             while (IsVisible && m_luxGraphicEngine.IsRunning)
             {
                 m_luxGraphicEngine.DrawFrame();
-                await Task.Delay(16);
+                //await Task.Delay(16);
             }
         }
 
