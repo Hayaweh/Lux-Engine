@@ -2,17 +2,14 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using SharpVk;
 using SharpVk.Interop;
 using ApplicationInfo = SharpVk.ApplicationInfo;
-using Buffer = System.Buffer;
 using CommandBuffer = SharpVk.CommandBuffer;
-using DebugReportCallbackCreateInfo = SharpVk.DebugReportCallbackCreateInfo;
+using CommandPool = SharpVk.CommandPool;
 using Device = SharpVk.Device;
 using DeviceCreateInfo = SharpVk.DeviceCreateInfo;
 using DeviceQueueCreateInfo = SharpVk.DeviceQueueCreateInfo;
-using ExtensionProperties = SharpVk.ExtensionProperties;
 using Framebuffer = SharpVk.Framebuffer;
 using GraphicsPipelineCreateInfo = SharpVk.GraphicsPipelineCreateInfo;
 using Image = SharpVk.Image;
@@ -21,11 +18,15 @@ using ImageViewCreateInfo = SharpVk.ImageViewCreateInfo;
 using Instance = SharpVk.Instance;
 using InstanceCreateInfo = SharpVk.InstanceCreateInfo;
 using PhysicalDevice = SharpVk.PhysicalDevice;
+using Pipeline = SharpVk.Pipeline;
+using PipelineLayout = SharpVk.PipelineLayout;
 using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
 using Queue = SharpVk.Queue;
 using RenderPass = SharpVk.RenderPass;
+using Semaphore = SharpVk.Semaphore;
 using ShaderModule = SharpVk.ShaderModule;
 using SubmitInfo = SharpVk.SubmitInfo;
+using SubpassDescription = SharpVk.SubpassDescription;
 using Surface = SharpVk.Surface;
 using Swapchain = SharpVk.Swapchain;
 using SwapchainCreateInfo = SharpVk.SwapchainCreateInfo;
@@ -36,627 +37,559 @@ namespace Lux.Graphics
 {
     public struct QueueFamilyIndices
     {
-        public int GraphicsFamily;
-        public int PresentationFamily;
+        public uint? GraphicsFamily;
+        public uint? PresentFamily;
 
-        public QueueFamilyIndices(int graphicsFamily = -1, int presentationFamily = -1)
+        public IEnumerable<uint> Indices
         {
-            GraphicsFamily = graphicsFamily;
-            PresentationFamily = presentationFamily;
+            get
+            {
+                if (this.GraphicsFamily.HasValue)
+                {
+                    yield return this.GraphicsFamily.Value;
+                }
+
+                if (this.PresentFamily.HasValue && this.PresentFamily != this.GraphicsFamily)
+                {
+                    yield return this.PresentFamily.Value;
+                }
+            }
         }
 
-        public bool IsComplete()
+        public bool IsComplete
         {
-            return GraphicsFamily >= 0 && PresentationFamily >= 0;
+            get
+            {
+                return this.GraphicsFamily.HasValue
+                    && this.PresentFamily.HasValue;
+            }
         }
     }
 
     public struct SwapChainSupportDetails
     {
         public SurfaceCapabilities Capabilities;
-        public List<SurfaceFormat> Formats;
-        public List<PresentMode> PresentModes;
+        public SurfaceFormat[] Formats;
+        public PresentMode[] PresentModes;
     }
 
     public class GraphicsEngine
     {
-        private bool m_enableValidationLayers = false;
-        private List<string> m_validationLayers = new List<string>();
-        private Instance m_vkInstance = null;
+        private Instance m_instance;
+        private Surface m_surface;
+        private PhysicalDevice m_physicalDevice;
+        private Device m_device;
+        private Queue m_graphicsQueue;
+        private Queue m_presentQueue;
+        private Swapchain m_swapChain;
+        private Image[] m_swapChainImages;
+        private ImageView[] m_swapChainImageViews;
+        private RenderPass m_renderPass;
+        private PipelineLayout m_pipelineLayout;
+        private Pipeline m_pipeline;
+        private ShaderModule m_fragShader;
+        private ShaderModule m_vertShader;
+        private Framebuffer[] m_frameBuffers;
+        private CommandPool m_commandPool;
+        private CommandBuffer[] m_commandBuffers;
+        private Semaphore m_imageAvailableSemaphore;
+        private Semaphore m_renderFinishedSemaphore;
+
+        private Format m_swapChainFormat;
+        private Extent2D m_swapChainExtent;
         private IntPtr m_windowHandle;
-        private Surface m_surface = null;
-        private static readonly DebugReportCallbackDelegate m_debugReportDelegate = DebugReport;
-        private PhysicalDevice m_vkPhysicalDevice = null;
-
-        private readonly List<string> m_deviceExtensions = new List<string>()
-            {
-                KhrSwapchain.ExtensionName
-            };
-
-        private Device m_logicalDevice = null;
-        private Queue m_graphicsQueue = null;
-        private Queue m_presentationQueue = null;
-        private Swapchain m_swapchain = null;
-
-        private List<Image> m_swapChainImages = new List<Image>();
-        private Format m_swapChainImageFormat;
-        private Extent2D m_swapChainExtent2D;
-        private List<ImageView> m_swapChainImageViews = new List<ImageView>();
-
-        private ShaderModule m_vertexShader, m_fragmentShader;
-        private SharpVk.PipelineLayout m_pipelineLayout;
-        private RenderPass m_renderPass = null;
-        private SharpVk.Pipeline[] m_graphicsPipeline;
-
-        private List<SharpVk.Framebuffer> m_swapChainFramebuffers = new List<Framebuffer>();
-
-        private SharpVk.CommandPool m_commandPool;
-        private List<SharpVk.CommandBuffer> m_commandBuffers;
-
-        private SharpVk.Semaphore m_imgAvailableSemaphore;
-        private SharpVk.Semaphore m_renderFinishedSemaphore;
-
-        private bool m_isRunning;
-        private Viewport m_viewport;
-
-        public bool IsRunning => m_isRunning;
 
         public void Run(IntPtr windowHandle)
         {
             m_windowHandle = windowHandle;
-            InitVulkan();
-            m_isRunning = true;
+            this.InitialiseVulkan();
         }
 
-        public void Stop()
+        private void InitialiseVulkan()
         {
-            m_logicalDevice.WaitIdle();
-            m_isRunning = false;
+            this.CreateInstance();
+            this.CreateSurface();
+            this.PickPhysicalDevice();
+            this.CreateLogicalDevice();
+            this.CreateSwapChain();
+            this.CreateImageViews();
+            this.CreateRenderPass();
+            this.CreateShaderModules();
+            this.CreateGraphicsPipeline();
+            this.CreateFrameBuffers();
+            this.CreateCommandPool();
+            this.CreateCommandBuffers();
+            this.CreateSemaphores();
         }
 
-        #region MyVulkanImpl
-
-        private void InitVulkan()
+        public void RecreateSwapChain()
         {
-            CreateInstance();
-            SetupDebugCallback();
-            CreateSurface();
-            SelectPhysicalDevice();
-            CreateLogicalDevice();
-            CreateSwapChain();
-            CreateImageViews();
-            CreateGraphicsPipeline();
-            CreateFramebuffers();
-            CreateCommandPool();
-            CreateCommandBuffers();
-            StartCommandBufferRecording();
-            CreateSemaphores();
+            this.m_device.WaitIdle();
+
+            this.m_commandPool.FreeCommandBuffers(m_commandBuffers);
+
+            foreach (var frameBuffer in this.m_frameBuffers)
+            {
+                frameBuffer.Dispose();
+            }
+            this.m_frameBuffers = null;
+
+            this.m_pipeline.Dispose();
+            this.m_pipeline = null;
+
+            this.m_pipelineLayout.Dispose();
+            this.m_pipelineLayout = null;
+
+            foreach (var imageView in this.m_swapChainImageViews)
+            {
+                imageView.Dispose();
+            }
+            this.m_swapChainImageViews = null;
+
+            this.m_renderPass.Dispose();
+            this.m_renderPass = null;
+
+            this.m_swapChain.Dispose();
+            this.m_swapChain = null;
+
+            this.CreateSwapChain();
+            this.CreateImageViews();
+            this.CreateRenderPass();
+            this.CreateGraphicsPipeline();
+            this.CreateFrameBuffers();
+            this.CreateCommandBuffers();
+        }
+
+        public void TearDown()
+        {
+            m_device.WaitIdle();
+
+            this.m_renderFinishedSemaphore.Dispose();
+            this.m_renderFinishedSemaphore = null;
+
+            this.m_imageAvailableSemaphore.Dispose();
+            this.m_imageAvailableSemaphore = null;
+
+            this.m_commandPool.Dispose();
+            this.m_commandPool = null;
+
+            foreach (var frameBuffer in this.m_frameBuffers)
+            {
+                frameBuffer.Dispose();
+            }
+            this.m_frameBuffers = null;
+
+            this.m_fragShader.Dispose();
+            this.m_fragShader = null;
+
+            this.m_vertShader.Dispose();
+            this.m_vertShader = null;
+
+            this.m_pipeline.Dispose();
+            this.m_pipeline = null;
+
+            this.m_pipelineLayout.Dispose();
+            this.m_pipelineLayout = null;
+
+            foreach (var imageView in this.m_swapChainImageViews)
+            {
+                imageView.Dispose();
+            }
+            this.m_swapChainImageViews = null;
+
+            this.m_renderPass.Dispose();
+            this.m_renderPass = null;
+
+            this.m_swapChain.Dispose();
+            this.m_swapChain = null;
+
+            this.m_device.Dispose();
+            this.m_device = null;
+
+            this.m_surface.Dispose();
+            this.m_surface = null;
+
+            this.m_instance.Dispose();
+            this.m_instance = null;
         }
 
         public void DrawFrame()
         {
-            m_logicalDevice.WaitIdle();
+            uint nextImage = this.m_swapChain.AcquireNextImage(uint.MaxValue, this.m_imageAvailableSemaphore, null);
 
-            uint nextFrameIndex = m_swapchain.AcquireNextImage(ulong.MaxValue, m_imgAvailableSemaphore, null);
-
-            SharpVk.SubmitInfo submitInfo = new SharpVk.SubmitInfo()
+            this.m_graphicsQueue.Submit(new SubmitInfo[]
             {
-                WaitSemaphores = new[] { m_imgAvailableSemaphore },
-                WaitDestinationStageMask = new[] { PipelineStageFlags.ColorAttachmentOutput, },
-                CommandBuffers = new[] { m_commandBuffers[(int)nextFrameIndex] },
-                SignalSemaphores = new[] { m_renderFinishedSemaphore }
-            };
+                new SubmitInfo
+                {
+                    CommandBuffers = new CommandBuffer[] { this.m_commandBuffers[nextImage] },
+                    SignalSemaphores = new[] { this.m_renderFinishedSemaphore },
+                    WaitDestinationStageMask = new [] { PipelineStageFlags.ColorAttachmentOutput },
+                    WaitSemaphores = new [] { this.m_imageAvailableSemaphore }
+                }
+            }, null);
 
-            m_graphicsQueue.Submit(submitInfo, null);
-
-            SharpVk.PresentInfo presentInfo = new SharpVk.PresentInfo()
+            this.m_presentQueue.Present(new SharpVk.PresentInfo
             {
-                WaitSemaphores = new[] { m_renderFinishedSemaphore },
-                Swapchains = new[] { m_swapchain },
-                ImageIndices = new[] { nextFrameIndex },
-                Results = null
-            };
-
-            m_presentationQueue.Present(presentInfo);
+                ImageIndices = new uint[] { nextImage },
+                Results = new Result[1],
+                WaitSemaphores = new[] { this.m_renderFinishedSemaphore },
+                Swapchains = new[] { this.m_swapChain }
+            });
         }
 
         private void CreateInstance()
         {
-            ApplicationInfo vkAppInfo = new ApplicationInfo
+            this.m_instance = Instance.Create(new InstanceCreateInfo
             {
-                EngineName = "Lux Engine",
-                ApplicationName = "",
-                ApplicationVersion = new Version(1, 0, 0),
-                ApiVersion = new Version(1, 0, 0),
-                EngineVersion = new Version(1, 0, 0)
-            };
-
-            List<string> instanceExtensions = new List<string>
-            {
-                KhrSurface.ExtensionName,
-                KhrWin32Surface.ExtensionName
-            };
-
-#if DEBUG
-            m_enableValidationLayers = true;
-
-#else
-            EnableValidationLayers = false;
-#endif
-            m_validationLayers = new List<string>();
-            if (m_enableValidationLayers)
-            {
-                if (Instance.EnumerateLayerProperties().Any(x => x.LayerName == "VK_LAYER_LUNARG_standard_validation"))
+                ApplicationInfo = new ApplicationInfo
                 {
-                    m_validationLayers.Add("VK_LAYER_LUNARG_standard_validation");
-                    instanceExtensions.Add(ExtDebugReport.ExtensionName);
-                }
-                else
+                    ApplicationName = "Hello Triangle",
+                    ApplicationVersion = new Version(1, 0, 0),
+                    EngineName = "SharpVk",
+                    EngineVersion = new Version(0, 1, 1)
+                },
+                EnabledExtensionNames = new[]
                 {
-                    throw new Exception("Requested Vulkan Validation Layer is unavailable: VK_LAYER_LUNARG_standard_validation");
+                    KhrSurface.ExtensionName,
+                    KhrWin32Surface.ExtensionName
                 }
-            }
-
-            InstanceCreateInfo vkInstanceInfo = new InstanceCreateInfo
-            {
-                ApplicationInfo = vkAppInfo,
-                EnabledExtensionNames = instanceExtensions.ToArray(),
-                EnabledLayerNames = m_validationLayers.ToArray()
-            };
-
-            m_vkInstance = Instance.Create(vkInstanceInfo, null);
-
-            if (m_vkInstance.Equals(null))
-            {
-                throw new Exception("Vulkan: Instance Creation failed! :(");
-            }
-
-            Console.WriteLine("Vulkan: Successfully Created Vulkan Instance.");
+            }, null);
         }
 
         private void CreateSurface()
         {
-            Win32SurfaceCreateInfo surfaceCreateInfo = new Win32SurfaceCreateInfo()
+            this.m_surface = this.m_instance.CreateWin32Surface(new Win32SurfaceCreateInfo
             {
-                Hwnd = m_windowHandle
-            };
-
-            m_surface = m_vkInstance.CreateWin32Surface(surfaceCreateInfo);
-
-            if (m_surface.Equals(null))
-            {
-                Console.WriteLine("Vulkan: Could not create surface.");
-            }
-            else
-            {
-                Console.WriteLine("Vulkan: Successfully created surface on Handle {0}", m_windowHandle);
-            }
+                Hwnd = this.m_windowHandle
+            });
         }
 
-        private void SelectPhysicalDevice()
+        private void PickPhysicalDevice()
         {
-            PhysicalDevice[] devices = m_vkInstance.EnumeratePhysicalDevices();
+            var availableDevices = this.m_instance.EnumeratePhysicalDevices();
 
-            if (devices.Length <= 0)
-            {
-                throw new IOException("Vulkan: No devices (GPU) with Vulkan support has been found.");
-            }
-
-            m_vkPhysicalDevice = devices.First(IsDeviceSuitable);
-
-            if (m_vkPhysicalDevice.Equals(null))
-            {
-                throw new IOException("Vulkan: Although some devices (GPU) has been found. None passed the suitability test.");
-            }
-            Console.WriteLine("Vulkan: Successfully selected a physical device.");
+            this.m_physicalDevice = availableDevices.First(IsSuitableDevice);
         }
 
         private void CreateLogicalDevice()
         {
-            QueueFamilyIndices indices = FindQueueFamilies(m_vkPhysicalDevice);
+            QueueFamilyIndices queueFamilies = FindQueueFamilies(this.m_physicalDevice);
 
-            List<DeviceQueueCreateInfo> queuesCreateInfos = new List<DeviceQueueCreateInfo>();
-            List<int> uniqueQueueFamilies = new List<int>()
+            this.m_device = m_physicalDevice.CreateDevice(new DeviceCreateInfo
             {
-                indices.GraphicsFamily,
-                indices.PresentationFamily
-            };
+                QueueCreateInfos = queueFamilies.Indices
+                                                .Select(index => new DeviceQueueCreateInfo
+                                                {
+                                                    QueueFamilyIndex = index,
+                                                    QueuePriorities = new[] { 1f }
+                                                }).ToArray(),
+                EnabledExtensionNames = new[] { KhrSwapchain.ExtensionName }
+            });
 
-            uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToList();
-
-            foreach (int queueFamily in uniqueQueueFamilies)
-            {
-                queuesCreateInfos.Add(new DeviceQueueCreateInfo
-                {
-                    QueueFamilyIndex = (uint)queueFamily,
-                    QueuePriorities = new[] { 1.0f }
-                });
-            }
-
-            PhysicalDeviceFeatures deviceFeatures = new PhysicalDeviceFeatures();
-
-            DeviceCreateInfo deviceCreateInfo = new DeviceCreateInfo
-            {
-                QueueCreateInfos = queuesCreateInfos.ToArray(),
-                EnabledFeatures = deviceFeatures,
-                EnabledExtensionNames = new[] { KhrSwapchain.ExtensionName },
-                EnabledLayerNames = m_validationLayers.ToArray()
-            };
-
-            m_logicalDevice = m_vkPhysicalDevice.CreateDevice(deviceCreateInfo);
-
-            m_graphicsQueue = m_logicalDevice.GetQueue((uint)indices.GraphicsFamily, 0);
-            m_presentationQueue = m_logicalDevice.GetQueue((uint)indices.PresentationFamily, 0);
+            this.m_graphicsQueue = this.m_device.GetQueue(queueFamilies.GraphicsFamily.Value, 0);
+            this.m_presentQueue = this.m_device.GetQueue(queueFamilies.PresentFamily.Value, 0);
         }
 
         private void CreateSwapChain()
         {
-            SwapChainSupportDetails swapChainDetails = QuerySwapChainSupport(m_vkPhysicalDevice);
+            SwapChainSupportDetails swapChainSupport = this.QuerySwapChainSupport(this.m_physicalDevice);
 
-            SurfaceFormat surfaceFormat = ChooseSwapSurfaceFormat(swapChainDetails.Formats);
-            PresentMode surfacePresentMode = ChooseSwapPresentMode(swapChainDetails.PresentModes);
-            Extent2D surfacExtent2D = ChooseSwapExtent(swapChainDetails.Capabilities);
-
-            uint imageCount = swapChainDetails.Capabilities.MinImageCount + 1;
-            if (swapChainDetails.Capabilities.MaxImageCount > 0 && imageCount > swapChainDetails.Capabilities.MaxImageCount)
+            uint imageCount = swapChainSupport.Capabilities.MinImageCount + 1;
+            if (swapChainSupport.Capabilities.MaxImageCount > 0 && imageCount > swapChainSupport.Capabilities.MaxImageCount)
             {
-                imageCount = swapChainDetails.Capabilities.MaxImageCount;
+                imageCount = swapChainSupport.Capabilities.MaxImageCount;
             }
 
-            QueueFamilyIndices indices = FindQueueFamilies(m_vkPhysicalDevice);
-            List<uint> queueFamilyIndices = new List<uint>()
-            {
-                (uint)indices.GraphicsFamily,
-                (uint)indices.PresentationFamily
-            };
+            SurfaceFormat surfaceFormat = this.ChooseSwapSurfaceFormat(swapChainSupport.Formats);
 
-            m_swapChainImageFormat = surfaceFormat.Format;
-            m_swapChainExtent2D = surfacExtent2D;
+            QueueFamilyIndices queueFamilies = this.FindQueueFamilies(this.m_physicalDevice);
 
-            SwapchainCreateInfo swapchainCreateInfo = new SwapchainCreateInfo()
+            var indices = queueFamilies.Indices.ToArray();
+
+            Extent2D extent = this.ChooseSwapExtent(swapChainSupport.Capabilities);
+
+            this.m_swapChain = m_device.CreateSwapchain(new SwapchainCreateInfo
             {
                 Surface = m_surface,
+                Flags = SwapchainCreateFlags.None,
+                PresentMode = this.ChooseSwapPresentMode(swapChainSupport.PresentModes),
                 MinImageCount = imageCount,
+                ImageExtent = extent,
+                ImageUsage = ImageUsageFlags.ColorAttachment,
+                PreTransform = swapChainSupport.Capabilities.CurrentTransform,
+                ImageArrayLayers = 1,
+                ImageSharingMode = indices.Length == 1
+                                    ? SharingMode.Exclusive
+                                    : SharingMode.Concurrent,
+                QueueFamilyIndices = indices,
                 ImageFormat = surfaceFormat.Format,
                 ImageColorSpace = surfaceFormat.ColorSpace,
-                ImageExtent = surfacExtent2D,
-                ImageArrayLayers = 1,
-                ImageUsage = ImageUsageFlags.ColorAttachment,
-                PreTransform = swapChainDetails.Capabilities.CurrentTransform,
-                CompositeAlpha = CompositeAlphaFlags.Opaque,
-                PresentMode = surfacePresentMode,
                 Clipped = true,
-                OldSwapchain = null
-            };
+                CompositeAlpha = CompositeAlphaFlags.Opaque,
+                OldSwapchain = this.m_swapChain
+            });
 
-            if (indices.GraphicsFamily != indices.PresentationFamily)
-            {
-                swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
-                swapchainCreateInfo.QueueFamilyIndices = queueFamilyIndices.ToArray();
-            }
-            else
-            {
-                swapchainCreateInfo.ImageSharingMode = SharingMode.Exclusive;
-                swapchainCreateInfo.QueueFamilyIndices = null;
-            }
-
-            //TODO: Check that surface is supported using vkGetPhysicalDeviceSupportKHR (Smtg like that with physicalDevice.Getblablabla
-
-            if (!m_vkPhysicalDevice.GetSurfaceSupport((uint)indices.PresentationFamily, m_surface))
-                throw new Exception("Vulkan: Surface is not supported by physical device!");
-
-            m_swapchain = m_logicalDevice.CreateSwapchain(swapchainCreateInfo);
-
-            m_swapChainImages.AddRange(m_swapchain.GetImages());
+            this.m_swapChainImages = this.m_swapChain.GetImages();
+            this.m_swapChainFormat = surfaceFormat.Format;
+            this.m_swapChainExtent = extent;
         }
 
         private void CreateImageViews()
         {
-            m_swapChainImageViews.Clear();
-
-            foreach (Image image in m_swapChainImages)
+            this.m_swapChainImageViews = this.m_swapChainImages.Select(image => m_device.CreateImageView(new ImageViewCreateInfo
             {
-                ImageViewCreateInfo imageViewCreateInfo = new ImageViewCreateInfo()
+                Components = ComponentMapping.Identity,
+                Format = this.m_swapChainFormat,
+                Image = image,
+                Flags = ImageViewCreateFlags.None,
+                ViewType = ImageViewType.ImageView2d,
+                SubresourceRange = new ImageSubresourceRange
                 {
-                    Image = image,
-                    Format = m_swapChainImageFormat,
-                    ViewType = ImageViewType.ImageView2d,
-                    Components = ComponentMapping.Identity,
-                    SubresourceRange = new ImageSubresourceRange()
-                    {
-                        AspectMask = ImageAspectFlags.Color,
-                        BaseMipLevel = 0,
-                        LevelCount = 1,
-                        BaseArrayLayer = 0,
-                        LayerCount = 1
-                    }
-                };
-
-                m_swapChainImageViews.Add(m_logicalDevice.CreateImageView(imageViewCreateInfo));
-            }
-        }
-
-        private void CreateGraphicsPipeline()
-        {
-            int vertexSize, fragmentSize = 0;
-            uint[] vertexShaderData = LoadShaderData(@"./Shaders/vertex.vert.spv", out vertexSize);
-            uint[] fragmentShaderData = LoadShaderData(@"./Shaders/fragment.frag.spv", out fragmentSize);
-
-            m_vertexShader = m_logicalDevice.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo()
-            {
-                Code = vertexShaderData,
-                CodeSize = vertexSize
-            });
-
-            m_fragmentShader = m_logicalDevice.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo()
-            {
-                Code = fragmentShaderData,
-                CodeSize = fragmentSize
-            });
-
-            PipelineShaderStageCreateInfo vertexShaderStageCreateInfo = new PipelineShaderStageCreateInfo()
-            {
-                Module = m_vertexShader,
-                Name = "main",
-                Stage = ShaderStageFlags.Vertex
-            };
-
-            PipelineShaderStageCreateInfo fragmentShaderStageCreateInfo = new PipelineShaderStageCreateInfo()
-            {
-                Module = m_fragmentShader,
-                Name = "main",
-                Stage = ShaderStageFlags.Fragment
-            };
-
-            PipelineShaderStageCreateInfo[] shaderStages = { vertexShaderStageCreateInfo, fragmentShaderStageCreateInfo };
-
-            SharpVk.PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo = new SharpVk.PipelineVertexInputStateCreateInfo()
-            {
-                VertexAttributeDescriptions = null,
-                VertexBindingDescriptions = null
-            };
-
-            SharpVk.PipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo = new SharpVk.PipelineInputAssemblyStateCreateInfo()
-            {
-                PrimitiveRestartEnable = false,
-                Topology = PrimitiveTopology.TriangleList
-            };
-
-            m_viewport = new Viewport()
-            {
-                X = 0.0f,
-                Y = 0.0f,
-                Width = m_swapChainExtent2D.Width,
-                Height = m_swapChainExtent2D.Height,
-                MaxDepth = 1.0f,
-                MinDepth = 0.0f
-            };
-
-            Rect2D scissorRect2D = new Rect2D(new Offset2D(0, 0), m_swapChainExtent2D);
-
-            SharpVk.PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo = new SharpVk.PipelineViewportStateCreateInfo()
-            {
-                Viewports = new[] { m_viewport },
-                Scissors = new[] { scissorRect2D }
-            };
-
-            SharpVk.PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo = new SharpVk.PipelineRasterizationStateCreateInfo()
-            {
-                DepthClampEnable = false,
-                RasterizerDiscardEnable = false,
-                PolygonMode = PolygonMode.Fill,
-                LineWidth = 1.0f,
-                CullMode = CullModeFlags.Back,
-                FrontFace = FrontFace.Clockwise,
-                DepthBiasEnable = false,
-                DepthBiasConstantFactor = 0.0f,
-                DepthBiasClamp = 0.0f,
-                DepthBiasSlopeFactor = 0.0f
-            };
-
-            SharpVk.PipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo = new SharpVk.PipelineMultisampleStateCreateInfo()
-            {
-                SampleShadingEnable = false,
-                RasterizationSamples = SampleCountFlags.SampleCount1,
-                MinSampleShading = 1.0f,
-                SampleMask = null,
-                AlphaToCoverageEnable = false,
-                AlphaToOneEnable = false
-            };
-
-            SharpVk.PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo = new SharpVk.PipelineDepthStencilStateCreateInfo();
-
-            PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState = new PipelineColorBlendAttachmentState()
-            {
-                ColorWriteMask = ColorComponentFlags.R | ColorComponentFlags.G | ColorComponentFlags.B | ColorComponentFlags.A,
-                BlendEnable = false,
-                SourceColorBlendFactor = BlendFactor.One,
-                DestinationColorBlendFactor = BlendFactor.Zero,
-                ColorBlendOp = BlendOp.Add,
-                SourceAlphaBlendFactor = BlendFactor.One,
-                DestinationAlphaBlendFactor = BlendFactor.Zero,
-                AlphaBlendOp = BlendOp.Add
-            };
-
-            SharpVk.PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo = new SharpVk.PipelineColorBlendStateCreateInfo()
-            {
-                LogicOpEnable = false,
-                LogicOp = LogicOp.Copy,
-                Attachments = new[] { pipelineColorBlendAttachmentState },
-                BlendConstants = new[] { 0.0f, 0.0f, 0.0f, 0.0f }
-            };
-
-            SharpVk.PipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo = new SharpVk.PipelineDynamicStateCreateInfo()
-            {
-                DynamicStates = new[] { DynamicState.LineWidth, DynamicState.Viewport }
-            };
-
-            m_pipelineLayout = m_logicalDevice.CreatePipelineLayout(new SharpVk.PipelineLayoutCreateInfo());
-            Console.WriteLine(m_pipelineLayout.Equals(null) ? "Vulkan: Failed to create pipeline layout." : "Vulkan: Successfully created pipeline layout.");
-
-            CreateRenderPass();
-
-            SharpVk.GraphicsPipelineCreateInfo graphicsPipelineCreateInfo = new SharpVk.GraphicsPipelineCreateInfo()
-            {
-                Stages = shaderStages,
-                VertexInputState = pipelineVertexInputStateCreateInfo,
-                InputAssemblyState = pipelineInputAssemblyStateCreateInfo,
-                ViewportState = pipelineViewportStateCreateInfo,
-                RasterizationState = pipelineRasterizationStateCreateInfo,
-                MultisampleState = pipelineMultisampleStateCreateInfo,
-                DepthStencilState = pipelineDepthStencilStateCreateInfo,
-                ColorBlendState = pipelineColorBlendStateCreateInfo,
-                DynamicState = pipelineDynamicStateCreateInfo,
-                Layout = m_pipelineLayout,
-                Subpass = 0,
-                RenderPass = m_renderPass,
-                BasePipelineIndex = -1,
-                BasePipelineHandle = null
-            };
-
-            m_graphicsPipeline = m_logicalDevice.CreateGraphicsPipelines(null, new[] { graphicsPipelineCreateInfo });
-            Console.WriteLine(m_graphicsPipeline.Equals(null) ? "Vulkan: Failed to create graphics pipeline." : "Vulkan: Successfully created graphics pipeline.");
+                    AspectMask = ImageAspectFlags.Color,
+                    BaseMipLevel = 0,
+                    LevelCount = 1,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1
+                }
+            })).ToArray();
         }
 
         private void CreateRenderPass()
         {
-            SubpassDependency subpassDependency = new SubpassDependency()
+            this.m_renderPass = m_device.CreateRenderPass(new SharpVk.RenderPassCreateInfo
             {
-                SourceSubpass = Constants.SubpassExternal,
-                SourceStageMask = PipelineStageFlags.ColorAttachmentOutput,
-                SourceAccessMask = 0,
-                DestinationSubpass = 0,
-                DestinationStageMask = PipelineStageFlags.ColorAttachmentOutput,
-                DestinationAccessMask = AccessFlags.ColorAttachmentRead | AccessFlags.ColorAttachmentWrite
-            };
-
-            AttachmentDescription colorAttachmentDescription = new AttachmentDescription()
-            {
-                Format = m_swapChainImageFormat,
-                Samples = SampleCountFlags.SampleCount1,
-                LoadOp = AttachmentLoadOp.Clear,
-                StoreOp = AttachmentStoreOp.Store,
-                StencilLoadOp = AttachmentLoadOp.DontCare,
-                StencilStoreOp = AttachmentStoreOp.DontCare,
-                InitialLayout = ImageLayout.Undefined,
-                FinalLayout = ImageLayout.PresentSource
-            };
-
-            AttachmentReference attachmentReference = new AttachmentReference()
-            {
-                Attachment = 0,
-                Layout = ImageLayout.ColorAttachmentOptimal
-            };
-
-            SharpVk.SubpassDescription subpassDescription = new SharpVk.SubpassDescription()
-            {
-                PipelineBindPoint = PipelineBindPoint.Graphics,
-                ColorAttachments = new[] { attachmentReference },
-                DepthStencilAttachment = new AttachmentReference(0, ImageLayout.DepthStencilAttachmentOptimal) // Fixes the Code 6 for DepthStencilAttachement. I'm not fan of that tho
-            };
-
-            m_renderPass = m_logicalDevice.CreateRenderPass(new SharpVk.RenderPassCreateInfo()
-            {
-                Attachments = new[] { colorAttachmentDescription },
-                Subpasses = new[] { subpassDescription },
-                Dependencies = new[] { subpassDependency }
+                Attachments = new[]
+                       {
+                        new AttachmentDescription
+                        {
+                            Format = this.m_swapChainFormat,
+                            Samples = SampleCountFlags.SampleCount1,
+                            LoadOp = AttachmentLoadOp.Clear,
+                            StoreOp = AttachmentStoreOp.Store,
+                            StencilLoadOp = AttachmentLoadOp.DontCare,
+                            StencilStoreOp = AttachmentStoreOp.DontCare,
+                            InitialLayout = ImageLayout.Undefined,
+                            FinalLayout = ImageLayout.PresentSource
+                        },
+                    },
+                Subpasses = new[]
+                       {
+                        new SubpassDescription
+                        {
+                            DepthStencilAttachment = new AttachmentReference
+                            {
+                                Attachment = Constants.AttachmentUnused
+                            },
+                            PipelineBindPoint = PipelineBindPoint.Graphics,
+                            ColorAttachments = new []
+                            {
+                                new AttachmentReference
+                                {
+                                    Attachment = 0,
+                                    Layout = ImageLayout.ColorAttachmentOptimal
+                                }
+                            }
+                        }
+                    },
+                Dependencies = new[]
+                       {
+                        new SubpassDependency
+                        {
+                            SourceSubpass = Constants.SubpassExternal,
+                            DestinationSubpass = 0,
+                            SourceStageMask = PipelineStageFlags.BottomOfPipe,
+                            SourceAccessMask = AccessFlags.MemoryRead,
+                            DestinationStageMask = PipelineStageFlags.ColorAttachmentOutput,
+                            DestinationAccessMask = AccessFlags.ColorAttachmentRead | AccessFlags.ColorAttachmentWrite
+                        },
+                        new SubpassDependency
+                        {
+                            SourceSubpass = 0,
+                            DestinationSubpass = Constants.SubpassExternal,
+                            SourceStageMask = PipelineStageFlags.ColorAttachmentOutput,
+                            SourceAccessMask = AccessFlags.ColorAttachmentRead | AccessFlags.ColorAttachmentWrite,
+                            DestinationStageMask = PipelineStageFlags.BottomOfPipe,
+                            DestinationAccessMask = AccessFlags.MemoryRead
+                        }
+                    }
             });
-
-            Console.WriteLine(m_renderPass.Equals(null) ? "Vulkan: Failed to create render pass." : "Vulkan: Successfully created render pass.");
         }
 
-        private void CreateFramebuffers()
+        private void CreateShaderModules()
         {
-            m_swapChainFramebuffers.Clear();
+            int codeSize;
+            var vertShaderData = LoadShaderData(@".\Shaders\vert.spv", out codeSize);
 
-            foreach (ImageView swapChainImageView in m_swapChainImageViews)
+            this.m_vertShader = m_device.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo
             {
-                SharpVk.FramebufferCreateInfo framebufferCreateInfo = new SharpVk.FramebufferCreateInfo()
-                {
-                    RenderPass = m_renderPass,
-                    Attachments = new[] { swapChainImageView },
-                    Width = m_swapChainExtent2D.Width,
-                    Height = m_swapChainExtent2D.Height,
-                    Layers = 1
-                };
+                Code = vertShaderData,
+                CodeSize = codeSize
+            });
 
-                Framebuffer framebuffer = m_logicalDevice.CreateFramebuffer(framebufferCreateInfo);
+            var fragShaderData = LoadShaderData(@".\Shaders\frag.spv", out codeSize);
 
-                if (!framebuffer.Equals(null))
-                {
-                    m_swapChainFramebuffers.Add(framebuffer);
-                    Console.WriteLine("Vulkan: Successfully created Framebuffer");
-                }
-                else
-                {
-                    Console.WriteLine("Vulkan: Failed to create Framebuffer");
-                }
-            }
+            this.m_fragShader = m_device.CreateShaderModule(new SharpVk.ShaderModuleCreateInfo
+            {
+                Code = fragShaderData,
+                CodeSize = codeSize
+            });
+        }
+
+        private void CreateGraphicsPipeline()
+        {
+            this.m_pipelineLayout = m_device.CreatePipelineLayout(new SharpVk.PipelineLayoutCreateInfo());
+
+            this.m_pipeline = m_device.CreateGraphicsPipelines(null, new[]
+            {
+                    new GraphicsPipelineCreateInfo
+                    {
+                        Layout = this.m_pipelineLayout,
+                        RenderPass = this.m_renderPass,
+                        Subpass = 0,
+                        VertexInputState = new SharpVk.PipelineVertexInputStateCreateInfo(),
+                        InputAssemblyState = new SharpVk.PipelineInputAssemblyStateCreateInfo
+                        {
+                            PrimitiveRestartEnable = false,
+                            Topology = PrimitiveTopology.TriangleList
+                        },
+                        ViewportState = new SharpVk.PipelineViewportStateCreateInfo
+                        {
+                            Viewports = new[]
+                            {
+                                new Viewport
+                                {
+                                    X = 0f,
+                                    Y = 0f,
+                                    Width = this.m_swapChainExtent.Width,
+                                    Height = this.m_swapChainExtent.Height,
+                                    MaxDepth = 1,
+                                    MinDepth = 0
+                                }
+                            },
+                            Scissors = new[]
+                            {
+                                new Rect2D
+                                {
+                                    Offset = new Offset2D(),
+                                    Extent= this.m_swapChainExtent
+                                }
+                            }
+                        },
+                        RasterizationState = new SharpVk.PipelineRasterizationStateCreateInfo
+                        {
+                            DepthClampEnable = false,
+                            RasterizerDiscardEnable = false,
+                            PolygonMode = PolygonMode.Fill,
+                            LineWidth = 1,
+                            CullMode = CullModeFlags.Back,
+                            FrontFace = FrontFace.Clockwise,
+                            DepthBiasEnable = false
+                        },
+                        MultisampleState = new SharpVk.PipelineMultisampleStateCreateInfo
+                        {
+                            SampleShadingEnable = false,
+                            RasterizationSamples = SampleCountFlags.SampleCount1,
+                            MinSampleShading = 1
+                        },
+                        ColorBlendState = new SharpVk.PipelineColorBlendStateCreateInfo
+                        {
+                            Attachments = new[]
+                            {
+                                new PipelineColorBlendAttachmentState
+                                {
+                                    ColorWriteMask = ColorComponentFlags.R
+                                                        | ColorComponentFlags.G
+                                                        | ColorComponentFlags.B
+                                                        | ColorComponentFlags.A,
+                                    BlendEnable = false,
+                                    SourceColorBlendFactor = BlendFactor.One,
+                                    DestinationColorBlendFactor = BlendFactor.Zero,
+                                    ColorBlendOp = BlendOp.Add,
+                                    SourceAlphaBlendFactor = BlendFactor.One,
+                                    DestinationAlphaBlendFactor = BlendFactor.Zero,
+                                    AlphaBlendOp = BlendOp.Add
+                                }
+                            },
+                            LogicOpEnable = false,
+                            LogicOp = LogicOp.Copy,
+                            BlendConstants = new float[] {0,0,0,0}
+                        },
+                        Stages = new[]
+                        {
+                            new PipelineShaderStageCreateInfo
+                            {
+                                Stage = ShaderStageFlags.Vertex,
+                                Module = this.m_vertShader,
+                                Name = "main"
+                            },
+                            new PipelineShaderStageCreateInfo
+                            {
+                                Stage = ShaderStageFlags.Fragment,
+                                Module = this.m_fragShader,
+                                Name = "main"
+                            }
+                        }
+                    }
+                }).Single();
+        }
+
+        private void CreateFrameBuffers()
+        {
+            this.m_frameBuffers = this.m_swapChainImageViews.Select(imageView => m_device.CreateFramebuffer(new SharpVk.FramebufferCreateInfo
+            {
+                RenderPass = m_renderPass,
+                Attachments = new[] { imageView },
+                Layers = 1,
+                Height = this.m_swapChainExtent.Height,
+                Width = this.m_swapChainExtent.Width
+            })).ToArray();
         }
 
         private void CreateCommandPool()
         {
-            QueueFamilyIndices indices = FindQueueFamilies(m_vkPhysicalDevice);
+            QueueFamilyIndices queueFamilies = FindQueueFamilies(this.m_physicalDevice);
 
-            SharpVk.CommandPoolCreateInfo commandPoolCreateInfo = new SharpVk.CommandPoolCreateInfo()
+            this.m_commandPool = m_device.CreateCommandPool(new SharpVk.CommandPoolCreateInfo
             {
-                QueueFamilyIndex = (uint)indices.GraphicsFamily
-            };
-
-            m_commandPool = m_logicalDevice.CreateCommandPool(commandPoolCreateInfo);
-
-            if (m_commandPool.Equals(null))
-            {
-                throw new Exception("Vulkan: Initialization of Command Pool failed.");
-            }
-            Console.WriteLine("Vulkan: Successfully created Command Pool");
+                QueueFamilyIndex = queueFamilies.GraphicsFamily.Value
+            });
         }
 
         private void CreateCommandBuffers()
         {
-            m_commandBuffers = new List<CommandBuffer>();
-
-            SharpVk.CommandBufferAllocateInfo commandBufferAllocateInfo = new SharpVk.CommandBufferAllocateInfo()
+            this.m_commandBuffers = m_device.AllocateCommandBuffers(new SharpVk.CommandBufferAllocateInfo
             {
-                CommandPool = m_commandPool,
-                Level = CommandBufferLevel.Primary,
-                CommandBufferCount = (uint)m_swapChainFramebuffers.Count
-            };
+                CommandBufferCount = (uint)this.m_frameBuffers.Length,
+                CommandPool = this.m_commandPool,
+                Level = CommandBufferLevel.Primary
+            });
 
-            m_commandBuffers.Clear();
-            m_commandBuffers.AddRange(m_logicalDevice.AllocateCommandBuffers(commandBufferAllocateInfo));
-
-            if (m_commandBuffers.Count < 1)
+            for (int index = 0; index < this.m_frameBuffers.Length; index++)
             {
-                throw new Exception("Vulkan: No Command Buffers initialized");
-            }
-            Console.WriteLine("Vulkan: Command Buffers successfully created");
-        }
+                var commandBuffer = this.m_commandBuffers[index];
 
-        private void StartCommandBufferRecording()
-        {
-            foreach (CommandBuffer commandBuffer in m_commandBuffers)
-            {
-                SharpVk.CommandBufferBeginInfo commandBufferBeginInfo = new SharpVk.CommandBufferBeginInfo()
+                commandBuffer.Begin(new SharpVk.CommandBufferBeginInfo
                 {
-                    Flags = CommandBufferUsageFlags.SimultaneousUse,
-                };
+                    Flags = CommandBufferUsageFlags.SimultaneousUse
+                });
 
-                commandBuffer.Begin(commandBufferBeginInfo);
-
-                SharpVk.RenderPassBeginInfo renderPassBeginInfo = new SharpVk.RenderPassBeginInfo()
+                commandBuffer.BeginRenderPass(new SharpVk.RenderPassBeginInfo
                 {
-                    RenderPass = m_renderPass,
-                    Framebuffer = m_swapChainFramebuffers[m_commandBuffers.IndexOf(commandBuffer)],
-                    RenderArea = new Rect2D(new Offset2D(), m_swapChainExtent2D),
-                    ClearValues = new[] { (ClearValue)new ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f), }
-                };
+                    RenderPass = this.m_renderPass,
+                    Framebuffer = this.m_frameBuffers[index],
+                    RenderArea = new Rect2D
+                    {
+                        Offset = new Offset2D(),
+                        Extent = this.m_swapChainExtent
+                    },
+                    ClearValues = new ClearValue[]
+                    {
+                        new ClearColorValue(0f, 0f, 0f, 1f)
+                    }
+                }, SubpassContents.Inline);
 
-                commandBuffer.SetViewport(0, m_viewport);
+                commandBuffer.BindPipeline(PipelineBindPoint.Graphics, this.m_pipeline);
 
-                commandBuffer.BeginRenderPass(renderPassBeginInfo, SubpassContents.Inline);
-
-                commandBuffer.BindPipeline(PipelineBindPoint.Graphics, m_graphicsPipeline[0]);
                 commandBuffer.Draw(3, 1, 0, 0);
 
                 commandBuffer.EndRenderPass();
@@ -667,223 +600,103 @@ namespace Lux.Graphics
 
         private void CreateSemaphores()
         {
-            SharpVk.SemaphoreCreateInfo semaphoreCreateInfo = new SharpVk.SemaphoreCreateInfo()
-            {
-                Flags = SemaphoreCreateFlags.None
-            };
-
-            m_imgAvailableSemaphore = m_logicalDevice.CreateSemaphore(semaphoreCreateInfo);
-            m_renderFinishedSemaphore = m_logicalDevice.CreateSemaphore(semaphoreCreateInfo);
-
-            if (m_imgAvailableSemaphore.Equals(null) || m_imgAvailableSemaphore.Equals(null))
-            {
-                throw new Exception("Vulkan: Semaphores creation failed");
-            }
-
-            Console.WriteLine("Vulkan: Successfully created Semaphores");
-        }
-
-        private static uint[] LoadShaderData(string filePath, out int codeSize)
-        {
-            if (File.Exists(filePath))
-            {
-                Console.WriteLine("Vulkan: Shader {0} found", filePath);
-
-                var fileBytes = File.ReadAllBytes(filePath);
-                var shaderData = new uint[(int)Math.Ceiling(fileBytes.Length / 4f)];
-
-                Buffer.BlockCopy(fileBytes, 0, shaderData, 0, fileBytes.Length);
-
-                codeSize = fileBytes.Length;
-
-                return shaderData;
-            }
-            else
-            {
-                Console.WriteLine("Vulkan: Could not find Shader file at: {0}", filePath);
-                codeSize = 0;
-                return new uint[0];
-            }
+            this.m_imageAvailableSemaphore = m_device.CreateSemaphore(new SharpVk.SemaphoreCreateInfo());
+            this.m_renderFinishedSemaphore = m_device.CreateSemaphore(new SharpVk.SemaphoreCreateInfo());
         }
 
         private QueueFamilyIndices FindQueueFamilies(PhysicalDevice device)
         {
-            QueueFamilyIndices indices = new QueueFamilyIndices(-1);
-
-            QueueFamilyProperties[] families = device.GetQueueFamilyProperties();
+            QueueFamilyIndices indices = new QueueFamilyIndices();
 
             var queueFamilies = device.GetQueueFamilyProperties();
 
-            int i = 0;
-            foreach (QueueFamilyProperties queueFamily in queueFamilies)
+            for (uint index = 0; index < queueFamilies.Length && !indices.IsComplete; index++)
             {
-                if ((queueFamily.QueueCount > 0) && ((queueFamily.QueueFlags & QueueFlags.Graphics) == QueueFlags.Graphics))
+                if (queueFamilies[index].QueueFlags.HasFlag(QueueFlags.Graphics))
                 {
-                    indices.GraphicsFamily = i;
+                    indices.GraphicsFamily = index;
                 }
 
-                if ((queueFamily.QueueCount > 0) && device.GetWin32PresentationSupport((uint)i))
+                if (device.GetSurfaceSupport(index, this.m_surface))
                 {
-                    indices.PresentationFamily = i;
+                    indices.PresentFamily = index;
                 }
-
-                if (indices.IsComplete())
-                {
-                    break;
-                }
-
-                i++;
             }
 
             return indices;
         }
 
-        private bool IsDeviceSuitable(PhysicalDevice physicalDevice)
+        private SurfaceFormat ChooseSwapSurfaceFormat(SurfaceFormat[] availableFormats)
         {
-            var properties = physicalDevice.GetProperties();
-            var features = physicalDevice.GetFeatures();
-
-            Console.WriteLine("Vulkan: Device Found: " + properties.DeviceName);
-
-            QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
-
-            if (!(properties.DeviceType.Equals(PhysicalDeviceType.DiscreteGpu) || properties.DeviceType.Equals(PhysicalDeviceType.VirtualGpu)))
+            if (availableFormats.Length == 1 && availableFormats[0].Format == Format.Undefined)
             {
-                return false;
-            }
-
-            if (!features.GeometryShader)
-            {
-                return false;
-            }
-
-            if (!indices.IsComplete())
-            {
-                return false;
-            }
-
-            if (!CheckDeviceExtensionsSupport(physicalDevice))
-            {
-                return false;
-            }
-
-            SwapChainSupportDetails swapChainSupportDetails = QuerySwapChainSupport(physicalDevice);
-
-            if (swapChainSupportDetails.Formats.Count <= 0 || swapChainSupportDetails.PresentModes.Count <= 0)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        private bool CheckDeviceExtensionsSupport(PhysicalDevice device)
-        {
-            ExtensionProperties[] extensions = device.EnumerateDeviceExtensionProperties(null);
-
-            bool contained = false;
-            foreach (string extension in m_deviceExtensions)
-            {
-                contained = false;
-
-                foreach (ExtensionProperties extensionProperties in extensions)
+                return new SurfaceFormat
                 {
-                    if (extensionProperties.ExtensionName.Equals(extension))
-                        contained = true;
-                }
+                    Format = Format.B8G8R8A8UNorm,
+                    ColorSpace = ColorSpace.SrgbNonlinear
+                };
+            }
 
-                if (!contained)
+            foreach (var format in availableFormats)
+            {
+                if (format.Format == Format.B8G8R8A8UNorm && format.ColorSpace == ColorSpace.SrgbNonlinear)
                 {
-                    return false;
+                    return format;
                 }
             }
 
-            return true;
+            return availableFormats[0];
         }
 
-        private SwapChainSupportDetails QuerySwapChainSupport(PhysicalDevice device)
+        private PresentMode ChooseSwapPresentMode(PresentMode[] availablePresentModes)
         {
-            SwapChainSupportDetails details = new SwapChainSupportDetails();
-            details.Capabilities = device.GetSurfaceCapabilities(m_surface);
-            details.Formats = new List<SurfaceFormat>(device.GetSurfaceFormats(m_surface));
-            details.PresentModes = new List<PresentMode>(device.GetSurfacePresentModes(m_surface));
-
-            return details;
+            return availablePresentModes.Contains(PresentMode.Mailbox)
+                    ? PresentMode.Mailbox
+                    : PresentMode.Fifo;
         }
 
-        private SurfaceFormat ChooseSwapSurfaceFormat(List<SurfaceFormat> formats)
+        public Extent2D ChooseSwapExtent(SurfaceCapabilities capabilities)
         {
-            if (formats.Count == 1 && formats[0].Format == Format.Undefined)
-            {
-                return new SurfaceFormat(Format.B8G8R8A8UNorm, ColorSpace.SrgbNonlinear);
-            }
-
-            foreach (SurfaceFormat surfaceFormat in formats)
-            {
-                if (surfaceFormat.Format == Format.B8G8R8A8UNorm && surfaceFormat.ColorSpace == ColorSpace.SrgbNonlinear)
-                {
-                    return surfaceFormat;
-                }
-            }
-
-            return formats[0];
-        }
-
-        private PresentMode ChooseSwapPresentMode(List<PresentMode> presentModes)
-        {
-            PresentMode bestMode = PresentMode.Fifo;
-
-            foreach (PresentMode presentMode in presentModes)
-            {
-                if (presentMode == PresentMode.Mailbox)
-                {
-                    return presentMode;
-                }
-                else if (presentMode == PresentMode.Immediate)
-                {
-                    bestMode = presentMode;
-                }
-            }
-
-            return bestMode;
-        }
-
-        private Extent2D ChooseSwapExtent(SurfaceCapabilities capabilities)
-        {
-            if (capabilities.CurrentExtent.Width != UInt32.MaxValue)
+            if (capabilities.CurrentExtent.Width != uint.MaxValue)
             {
                 return capabilities.CurrentExtent;
             }
             else
             {
-                Extent2D actualExtent2D = new Extent2D(UInt32.MaxValue, UInt32.MaxValue);
-
-                actualExtent2D.Width = Math.Max(capabilities.MinImageExtent.Width, Math.Min(capabilities.MaxImageExtent.Width, actualExtent2D.Width));
-                actualExtent2D.Height = Math.Max(capabilities.MinImageExtent.Height, Math.Min(capabilities.MaxImageExtent.Height, actualExtent2D.Height));
-
-                return actualExtent2D;
+                return new Extent2D
+                {
+                    Width = Math.Max(capabilities.MinImageExtent.Width, Math.Min(capabilities.MaxImageExtent.Width, uint.MaxValue)),
+                    Height = Math.Max(capabilities.MinImageExtent.Height, Math.Min(capabilities.MaxImageExtent.Height, uint.MaxValue))
+                };
             }
         }
 
-        private void SetupDebugCallback()
+        private SwapChainSupportDetails QuerySwapChainSupport(PhysicalDevice device)
         {
-            if (!m_enableValidationLayers)
-                return;
-            m_vkInstance.CreateDebugReportCallback(new DebugReportCallbackCreateInfo
+            return new SwapChainSupportDetails
             {
-                Flags = DebugReportFlags.Error | DebugReportFlags.Warning | DebugReportFlags.PerformanceWarning,
-                PfnCallback = m_debugReportDelegate
-            });
-
-            Console.WriteLine("Vulkan: Debug Report set up.");
+                Capabilities = device.GetSurfaceCapabilities(this.m_surface),
+                Formats = device.GetSurfaceFormats(this.m_surface),
+                PresentModes = device.GetSurfacePresentModes(this.m_surface)
+            };
         }
 
-        private static Bool32 DebugReport(DebugReportFlags flags, DebugReportObjectType objectType, ulong o, Size location, int messageCode, string layerPrefix, string message, IntPtr userData)
+        private bool IsSuitableDevice(PhysicalDevice device)
         {
-            Console.WriteLine("Vulkan Code: " + messageCode + " - " + message);
-            return false;
+            return device.EnumerateDeviceExtensionProperties(null).Any(extension => extension.ExtensionName == KhrSwapchain.ExtensionName)
+                    && FindQueueFamilies(device).IsComplete;
         }
 
-        #endregion MyVulkanImpl
+        private static uint[] LoadShaderData(string filePath, out int codeSize)
+        {
+            var fileBytes = File.ReadAllBytes(filePath);
+            var shaderData = new uint[(int)Math.Ceiling(fileBytes.Length / 4f)];
+
+            System.Buffer.BlockCopy(fileBytes, 0, shaderData, 0, fileBytes.Length);
+
+            codeSize = fileBytes.Length;
+
+            return shaderData;
+        }
     }
 }

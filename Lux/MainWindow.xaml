@@ -1,16 +1,31 @@
-﻿<Window x:Class="Lux.MainWindow"
+﻿<Window
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Lux"
+        xmlns:ee="http://schemas.microsoft.com/expression/2010/effects" x:Class="Lux.MainWindow"
+        xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
         mc:Ignorable="d"
-        Title="MainWindow" Height="350" Width="525" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow">
-    <Grid Background="#FF1A1A1D">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="149*"/>
-            <ColumnDefinition Width="368*"/>
-        </Grid.ColumnDefinitions>
+        Title="MainWindow" Height="720" Width="1280" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow" Loaded="Window_Loaded">
+    <StackPanel Orientation="Horizontal">
+        <StackPanel>
+            <Button x:Name="QuitButton" Content="Exit Application" Width="75"/>
+            <Button x:Name="button1" Content="Button" Width="75"/>
+            <Button x:Name="button2" Content="Button" Width="75"/>
+            <Button x:Name="button3" Content="Button" Width="75"/>
+            <CheckBox x:Name="checkBox" Content="CheckBox"/>
+            <CheckBox x:Name="checkBox1" Content="CheckBox"/>
+            <CheckBox x:Name="checkBox2" Content="CheckBox"/>
+            <Slider x:Name="slider"/>
+            <Slider x:Name="slider1"/>
+            <Slider x:Name="slider2"/>
+            <ComboBox x:Name="comboBox" Width="120"/>
+        </StackPanel>
+        <WindowsFormsHost Margin="0" Width="1150">
+            <wf:UserControl x:Name="UserControl"/>
+        </WindowsFormsHost>
+    </StackPanel>
 
-    </Grid>
+
 </Window>
