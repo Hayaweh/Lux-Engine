@@ -7,7 +7,7 @@
         xmlns:ee="http://schemas.microsoft.com/expression/2010/effects" x:Class="Lux.MainWindow"
         xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
         mc:Ignorable="d"
-        Title="MainWindow" Height="720" Width="1280" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow" Loaded="Window_Loaded">
+        Title="MainWindow" Height="720" Width="1280" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow" >
     <DockPanel >
         <StackPanel>
             <Button x:Name="QuitButton" Content="Exit Application" Width="75"/>
