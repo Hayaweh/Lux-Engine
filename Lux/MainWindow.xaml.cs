@@ -24,7 +24,7 @@ namespace Lux
 
         public MainWindow()
         {
-            Activated += InitializeVulkan;
+            Loaded += InitializeVulkan;
             InitializeComponent();
 
             Width = 1280;
@@ -32,7 +32,7 @@ namespace Lux
             Title = "Lux Engine Editor";
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            QuitButton.MouseUp += (sender, args) => { Console.WriteLine("Quit Button pressed."); this.Close(); };
+            QuitButton.Click += (sender, args) => { this.Close(); };
         }
 
         private async void InitializeVulkan(object sender, EventArgs eventArgs)
@@ -55,17 +55,31 @@ namespace Lux
 
         private void OnSizeChanged(object sender, EventArgs sizeChangedEventArgs)
         {
-            Console.WriteLine("Recreating Swapchain");
-            m_luxGraphicEngine.RecreateSwapChain();
+            lock (m_luxGraphicEngine)
+            {
+                //Console.WriteLine("Recreating Swapchain");
+                m_luxGraphicEngine.RecreateSwapChain();
+            }
         }
 
         private async void MainLoop()
         {
+            DateTime frameStart, frameEnd, frameTime = new DateTime();
+
             while (IsVisible)
             {
-                m_luxGraphicEngine.DrawFrame();
+                frameStart = DateTime.UtcNow;
+
+                lock (m_luxGraphicEngine)
+                {
+                    m_luxGraphicEngine.DrawFrame();
+                }
+
+                frameEnd = DateTime.UtcNow;
+
+                //Console.WriteLine("Frametime: {0}ms", (frameEnd.TimeOfDay - frameStart.TimeOfDay).TotalMilliseconds);
                 //InvalidateVisual();
-                //await Task.Delay(16);
+                await Task.Delay(0);
             }
         }
 
@@ -75,8 +89,11 @@ namespace Lux
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            m_renderingThread.Abort();
-            m_luxGraphicEngine.TearDown();
+            Visibility = Visibility.Hidden;
+            lock (m_luxGraphicEngine)
+            {
+                m_luxGraphicEngine.TearDown();
+            }
         }
 
         public bool IsAmbientPropertyAvailable(string propertyName)

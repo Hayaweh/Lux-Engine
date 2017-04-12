@@ -8,7 +8,7 @@
         xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
         mc:Ignorable="d"
         Title="MainWindow" Height="720" Width="1280" WindowStartupLocation="CenterScreen" WindowStyle="ThreeDBorderWindow" Loaded="Window_Loaded">
-    <StackPanel Orientation="Horizontal">
+    <DockPanel >
         <StackPanel>
             <Button x:Name="QuitButton" Content="Exit Application" Width="75"/>
             <Button x:Name="button1" Content="Button" Width="75"/>
@@ -22,10 +22,10 @@
             <Slider x:Name="slider2"/>
             <ComboBox x:Name="comboBox" Width="120"/>
         </StackPanel>
-        <WindowsFormsHost Margin="0" Width="1150">
-            <wf:UserControl x:Name="UserControl"/>
-        </WindowsFormsHost>
-    </StackPanel>
+            <WindowsFormsHost MinWidth="1" MinHeight="1">
+                <wf:UserControl x:Name="UserControl" />
+            </WindowsFormsHost>
+    </DockPanel>
 
 
 </Window>

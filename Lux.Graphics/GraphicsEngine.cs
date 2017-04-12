@@ -21,6 +21,7 @@ using PhysicalDevice = SharpVk.PhysicalDevice;
 using Pipeline = SharpVk.Pipeline;
 using PipelineLayout = SharpVk.PipelineLayout;
 using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
+using PresentInfo = SharpVk.PresentInfo;
 using Queue = SharpVk.Queue;
 using RenderPass = SharpVk.RenderPass;
 using Semaphore = SharpVk.Semaphore;
@@ -218,17 +219,17 @@ namespace Lux.Graphics
             uint nextImage = this.m_swapChain.AcquireNextImage(uint.MaxValue, this.m_imageAvailableSemaphore, null);
 
             this.m_graphicsQueue.Submit(new SubmitInfo[]
-            {
-                new SubmitInfo
-                {
-                    CommandBuffers = new CommandBuffer[] { this.m_commandBuffers[nextImage] },
-                    SignalSemaphores = new[] { this.m_renderFinishedSemaphore },
-                    WaitDestinationStageMask = new [] { PipelineStageFlags.ColorAttachmentOutput },
-                    WaitSemaphores = new [] { this.m_imageAvailableSemaphore }
-                }
-            }, null);
+                                        {
+                                                new SubmitInfo
+                                                {
+                                                    CommandBuffers = new CommandBuffer[] { this.m_commandBuffers[nextImage] },
+                                                    SignalSemaphores = new[] { this.m_renderFinishedSemaphore },
+                                                    WaitDestinationStageMask = new [] { PipelineStageFlags.ColorAttachmentOutput },
+                                                    WaitSemaphores = new [] { this.m_imageAvailableSemaphore }
+                                                }
+                                        }, null);
 
-            this.m_presentQueue.Present(new SharpVk.PresentInfo
+            this.m_presentQueue.Present(new PresentInfo
             {
                 ImageIndices = new uint[] { nextImage },
                 Results = new Result[1],
