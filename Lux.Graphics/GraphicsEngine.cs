@@ -1,38 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using Lux.Core;
 using SharpVk;
-using SharpVk.Interop;
-using ApplicationInfo = SharpVk.ApplicationInfo;
-using CommandBuffer = SharpVk.CommandBuffer;
-using CommandPool = SharpVk.CommandPool;
-using Device = SharpVk.Device;
-using DeviceCreateInfo = SharpVk.DeviceCreateInfo;
-using DeviceQueueCreateInfo = SharpVk.DeviceQueueCreateInfo;
-using Framebuffer = SharpVk.Framebuffer;
-using GraphicsPipelineCreateInfo = SharpVk.GraphicsPipelineCreateInfo;
-using Image = SharpVk.Image;
-using ImageView = SharpVk.ImageView;
-using ImageViewCreateInfo = SharpVk.ImageViewCreateInfo;
-using Instance = SharpVk.Instance;
-using InstanceCreateInfo = SharpVk.InstanceCreateInfo;
-using PhysicalDevice = SharpVk.PhysicalDevice;
-using Pipeline = SharpVk.Pipeline;
-using PipelineLayout = SharpVk.PipelineLayout;
-using PipelineShaderStageCreateInfo = SharpVk.PipelineShaderStageCreateInfo;
-using PresentInfo = SharpVk.PresentInfo;
-using Queue = SharpVk.Queue;
-using RenderPass = SharpVk.RenderPass;
-using Semaphore = SharpVk.Semaphore;
-using ShaderModule = SharpVk.ShaderModule;
-using SubmitInfo = SharpVk.SubmitInfo;
-using SubpassDescription = SharpVk.SubpassDescription;
-using Surface = SharpVk.Surface;
-using Swapchain = SharpVk.Swapchain;
-using SwapchainCreateInfo = SharpVk.SwapchainCreateInfo;
-using Version = SharpVk.Version;
-using Win32SurfaceCreateInfo = SharpVk.Win32SurfaceCreateInfo;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Lux.Graphics
 {
@@ -77,10 +47,23 @@ namespace Lux.Graphics
     public class GraphicsEngine
     {
         private IntPtr m_windowHandle;
+        private bool m_usingValidationLayer;
+        private string m_applicationName;
+        private readonly Logger m_logger;
 
-        public void Run(IntPtr windowHandle)
+        private Instance m_vkInstance;
+
+        public GraphicsEngine()
         {
+            m_logger = new Logger("VulkanLog");
+        }
+
+        public void Run(IntPtr windowHandle, bool usingValidationLayer, string appName = "Vulkan Application")
+        {
+            m_usingValidationLayer = usingValidationLayer;
             m_windowHandle = windowHandle;
+            m_applicationName = appName;
+            Initialize();
         }
 
         public void RecreateSwapChain()
@@ -93,6 +76,82 @@ namespace Lux.Graphics
 
         public void DrawFrame()
         {
+        }
+
+        private void Initialize()
+        {
+            CreateInstance();
+        }
+
+        private void CreateInstance()
+        {
+            ApplicationInfo applicationInfo = VkCreator.CreateApplicationInfo("Lux Graphics", default(SharpVk.Version), m_applicationName);
+
+            List<string> extensions = new List<string>()
+            {
+                KhrSurface.ExtensionName,
+                KhrWin32Surface.ExtensionName,
+            };
+
+            CheckInstanceExtensions(extensions);
+
+            List<string> validationLayers = new List<string>();
+            m_logger.WriteLine("{0} validation layers", m_usingValidationLayer ? "Using" : "Not using");
+
+            if (m_usingValidationLayer)
+            {
+                validationLayers.Add("VK_LAYER_LUNARG_standard_validation");
+
+                m_logger.WriteLine("Requested Instance validation layers are:");
+
+                validationLayers.ForEach(m_logger.WriteLine);
+
+                List<LayerProperties> layerProperties = Instance.EnumerateLayerProperties().ToList();
+
+                m_logger.WriteLine("Available Instance validation layers are:");
+
+                layerProperties.Select(layer => layer.LayerName).ToList().ForEach(m_logger.WriteLine);
+
+                if (validationLayers.Except(layerProperties.Select(layer => layer.LayerName)).Any())
+                {
+                    m_logger.WriteLine("The following requested validation layers are not available:");
+
+                    validationLayers.Except(layerProperties.Select(layer => layer.LayerName)).ToList().ForEach(m_logger.WriteLine);
+
+                    throw new Exception("Instance validation layers not supported!");
+                }
+
+                m_logger.WriteLine("All requested Instance validation layers have been found and are supported.");
+            }
+
+            InstanceCreateInfo instanceCreateInfo = VkCreator.CreateInstanceCreateInfo(applicationInfo, extensions.ToArray(), validationLayers.ToArray());
+
+            m_vkInstance = Instance.Create(instanceCreateInfo);
+
+            m_logger.WriteLine("Instance created for application \"{0}\"", m_applicationName);
+        }
+
+        private void CheckInstanceExtensions(List<string> extensions)
+        {
+            m_logger.WriteLine("Requested Instance extensions are:");
+
+            extensions.ForEach(m_logger.WriteLine);
+
+            List<ExtensionProperties> extensionProperties = Instance.EnumerateExtensionProperties(null).ToList();
+
+            m_logger.WriteLine("Instance available extensions are:");
+
+            extensionProperties.Select(extension => extension.ExtensionName).ToList().ForEach(m_logger.WriteLine);
+
+            if (extensions.Except(extensionProperties.Select(extensionProperty => extensionProperty.ExtensionName)).Any())
+            {
+                m_logger.WriteLine("The Following requested extensions are not available:");
+
+                extensions.Except(extensionProperties.Select(extensionProperty => extensionProperty.ExtensionName)).ToList().ForEach(m_logger.WriteLine);
+
+                throw new Exception("Instance extensions not supported!");
+            }
+            m_logger.WriteLine("All requested Instance extensions have been found and are supported.");
         }
     }
 }

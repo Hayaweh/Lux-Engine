@@ -2,11 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Forms;
-using System.Windows.Interop;
 using Lux.Graphics;
-using System.Windows.Forms.Integration;
-using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace Lux
 {
@@ -33,10 +29,10 @@ namespace Lux
 
         private void InitializeVulkan(object sender, EventArgs eventArgs)
         {
-            Activated -= InitializeVulkan;
+            Loaded -= InitializeVulkan;
 
             m_luxGraphicEngine = new GraphicsEngine();
-            m_luxGraphicEngine.Run(UserControl.Handle);
+            m_luxGraphicEngine.Run(UserControl.Handle, true, Title);
             UserControl.ClientSizeChanged += OnSizeChanged;
 
             Console.WriteLine("Now Starting Main Loop");
